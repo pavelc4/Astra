@@ -36,6 +36,9 @@ func main() {
 	r.Route("/api/pinterest", func(r chi.Router) {
 		r.Get("/download", handler.HandlePinterestDownload)
 	})
+	r.Route("/api/terabox", func(r chi.Router) {
+		r.Get("/download", handler.HandleTeraboxDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
@@ -47,6 +50,7 @@ func main() {
 				"/api/meta/threads/download",
 				"/api/reddit/download",
 				"/api/pinterest/download",
+				"/api/terabox/download",
 			},
 		}, "Universal Downloader API is running")
 	})

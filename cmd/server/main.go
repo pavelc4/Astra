@@ -22,6 +22,9 @@ func main() {
 	r.Route("/api/tiktok", func(r chi.Router) {
 		r.Get("/download", handler.HandleTikTokDownload)
 	})
+	r.Route("/api/twitter", func(r chi.Router) {
+		r.Get("/download", handler.HandleTwitterDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{

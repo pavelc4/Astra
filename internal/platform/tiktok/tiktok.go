@@ -2,26 +2,49 @@ package tiktok
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 
-	"github.com/heilkit/tt/tt"
+	"github.com/pavelc4/astra/internal/tiktok"
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/types"
 )
 
+type UserInfo struct {
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+	Avatar   string `json:"avatar"`
+}
+
 type Result struct {
 	Platform  string               `json:"platform"`
 	Title     *string              `json:"title"`
 	Thumbnail *string              `json:"thumbnail"`
+	User      *UserInfo            `json:"user,omitempty"`
 	Downloads []types.DownloadItem `json:"downloads"`
 }
 
+type UserResult struct {
+	Platform    string  `json:"platform"`
+	Username    string  `json:"username"`
+	Nickname    string  `json:"nickname"`
+	AvatarThumb string  `json:"avatar_thumb"`
+	Avatar      string  `json:"avatar"`
+	AvatarLarger string `json:"avatar_larger"`
+	Signature   string  `json:"signature"`
+	Verified    bool    `json:"verified"`
+	Followers   int     `json:"followers"`
+	Following   int     `json:"following"`
+	Likes       int     `json:"likes"`
+	Videos      int     `json:"videos"`
+}
+
 func FetchData(videoURL string) (*Result, error) {
-	post, err := tt.GetPost(videoURL, true)
+	post, err := tt.GetPostOriginal(videoURL)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok fetch failed: %s", err.Error()))
 	}
-
 	if post == nil {
 		return nil, errors.NewUpstream("TikTok returned empty response")
 	}
@@ -30,49 +53,103 @@ func FetchData(videoURL string) (*Result, error) {
 	if post.Title != "" {
 		title = &post.Title
 	}
+	var thumbnail *string
+	if post.Cover != "" {
+		thumbnail = &post.Cover
+	}
 
 	var downloads []types.DownloadItem
 
+	if post.Original != "" {
+		label := "Original"
+		if post.OriginalSize > 0 {
+			label = fmt.Sprintf("Original (%dMB)", post.OriginalSize/1024/1024)
+		}
+		downloads = append(downloads, types.DownloadItem{Label: label, URL: post.Original, Type: types.MediaVideo})
+	}
 	if post.Hdplay != "" {
-		downloads = append(downloads, types.DownloadItem{
-			Label: "HD",
-			URL:   post.Hdplay,
-			Type:  types.MediaVideo,
-		})
+		downloads = append(downloads, types.DownloadItem{Label: "HD", URL: post.Hdplay, Type: types.MediaVideo})
 	}
 	if post.Play != "" {
-		downloads = append(downloads, types.DownloadItem{
-			Label: "No Watermark",
-			URL:   post.Play,
-			Type:  types.MediaVideo,
-		})
+		downloads = append(downloads, types.DownloadItem{Label: "No Watermark", URL: post.Play, Type: types.MediaVideo})
 	}
 	if post.Wmplay != "" {
-		downloads = append(downloads, types.DownloadItem{
-			Label: "With Watermark",
-			URL:   post.Wmplay,
-			Type:  types.MediaVideo,
-		})
+		downloads = append(downloads, types.DownloadItem{Label: "With Watermark", URL: post.Wmplay, Type: types.MediaVideo})
 	}
 	if post.Music != "" {
-		downloads = append(downloads, types.DownloadItem{
-			Label: "Audio",
-			URL:   post.Music,
-			Type:  types.MediaAudio,
-		})
+		downloads = append(downloads, types.DownloadItem{Label: "Audio", URL: post.Music, Type: types.MediaAudio})
 	}
 	for _, img := range post.Images {
 		if img != "" {
-			downloads = append(downloads, types.DownloadItem{
-				URL:  img,
-				Type: types.MediaImage,
-			})
+			downloads = append(downloads, types.DownloadItem{URL: img, Type: types.MediaImage})
 		}
 	}
 
-	return &Result{
-		Platform: "tiktok",
-		Title:    title,
+	result := &Result{
+		Platform:  "tiktok",
+		Title:     title,
+		Thumbnail: thumbnail,
 		Downloads: downloads,
+	}
+	if post.Author.UniqueId != "" {
+		result.User = &UserInfo{
+			Username: post.Author.UniqueId,
+			Nickname: post.Author.Nickname,
+			Avatar:   post.Author.Avatar,
+		}
+	}
+	return result, nil
+}
+
+func FetchUser(profileURL string) (*UserResult, error) {
+	username := extractUsername(profileURL)
+	if username == "" {
+		return nil, errors.NewInvalidURL("could not extract username from URL")
+	}
+
+	detail, err := tt.GetUserDetail(username)
+	if err != nil {
+		return nil, errors.NewUpstream(fmt.Sprintf("TikTok user fetch failed: %s", err.Error()))
+	}
+	if detail == nil {
+		return nil, errors.NewUpstream("TikTok returned empty user response")
+	}
+
+	return &UserResult{
+		Platform:     "tiktok",
+		Username:     detail.User.UniqueId,
+		Nickname:     detail.User.Nickname,
+		AvatarThumb:  detail.User.AvatarThumb,
+		Avatar:       detail.User.AvatarMedium,
+		AvatarLarger: detail.User.AvatarLarger,
+		Signature:    detail.User.Signature,
+		Verified:     detail.User.Verified,
+		Followers:    detail.Stats.FollowerCount,
+		Following:    detail.Stats.FollowingCount,
+		Likes:        detail.Stats.HeartCount,
+		Videos:       detail.Stats.VideoCount,
 	}, nil
+}
+
+func extractUsername(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+
+	// Parse as URL if it looks like one
+	if strings.HasPrefix(s, "http") || strings.HasPrefix(s, "www.") {
+		if !strings.HasPrefix(s, "http") {
+			s = "https://" + s
+		}
+		u, err := url.Parse(s)
+		if err != nil {
+			return ""
+		}
+		s = u.Path
+	}
+
+	s = strings.TrimPrefix(s, "/")
+	s = strings.TrimPrefix(s, "@")
+	return s
 }

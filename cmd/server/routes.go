@@ -13,6 +13,7 @@ func registerRoutes(r chi.Router) {
 
 	r.Route("/api/tiktok", func(r chi.Router) {
 		r.Get("/download", handler.HandleTikTokDownload)
+		r.Get("/profile", handler.HandleTikTokProfile)
 	})
 	r.Route("/api/twitter", func(r chi.Router) {
 		r.Get("/download", handler.HandleTwitterDownload)
@@ -49,6 +50,7 @@ func registerRoutes(r chi.Router) {
 			"endpoints": []string{
 				"/health",
 				"/api/tiktok/download",
+				"/api/tiktok/profile",
 				"/api/twitter/download",
 				"/api/meta/instagram/download",
 				"/api/meta/facebook/download",

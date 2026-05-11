@@ -25,27 +25,20 @@ func main() {
 	r.Route("/api/twitter", func(r chi.Router) {
 		r.Get("/download", handler.HandleTwitterDownload)
 	})
+	r.Route("/api/meta", func(r chi.Router) {
+		r.Get("/instagram/download", handler.HandleInstagramDownload)
+		r.Get("/facebook/download", handler.HandleFacebookDownload)
+		r.Get("/threads/download", handler.HandleThreadsDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
 			"endpoints": []string{
-				"/api/bluesky/download",
-				"/api/capcut/download",
-				"/api/dailymotion/download",
-				"/api/douyin/download",
-				"/api/kuaishou/download",
-				"/api/linkedin/download",
-				"/api/meta/download",
-				"/api/pinterest/download",
-				"/api/reddit/download",
-				"/api/snapchat/download",
-				"/api/soundcloud/download",
-				"/api/spotify/download",
-				"/api/terabox/download",
-				"/api/threads/download",
 				"/api/tiktok/download",
-				"/api/tumblr/download",
 				"/api/twitter/download",
+				"/api/meta/instagram/download",
+				"/api/meta/facebook/download",
+				"/api/meta/threads/download",
 			},
 		}, "Universal Downloader API is running")
 	})

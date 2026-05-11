@@ -1,12 +1,16 @@
 package meta
 
+import (
+	"github.com/pavelc4/astra/internal/instagram"
+)
+
 type InstagramResult struct {
-	Platform string         `json:"platform"`
-	Raw      []SnapSaveItem `json:"raw"`
+	Platform string              `json:"platform"`
+	Raw      []instagram.MediaItem `json:"raw"`
 }
 
 func FetchInstagramData(url string) (*InstagramResult, error) {
-	items, err := fetchSnapsave(url)
+	items, err := instagram.FetchMedia(url)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package meta
+package instagram
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"github.com/pavelc4/astra/internal/httpclient"
 )
 
-func fetchSnapsave(targetURL string) ([]SnapSaveItem, error) {
+func FetchMedia(targetURL string) ([]MediaItem, error) {
 	form := url.Values{"url": {targetURL}}
 
 	req, err := http.NewRequest(http.MethodPost, "https://snapsave.app/action.php", strings.NewReader(form.Encode()))
@@ -39,16 +39,16 @@ func fetchSnapsave(targetURL string) ([]SnapSaveItem, error) {
 		return nil, errors.NewUpstream("SnapSave response read failed")
 	}
 
-	return parseSnapsave(body)
+	return parseMedia(body)
 }
 
-func parseSnapsave(data []byte) ([]SnapSaveItem, error) {
+func parseMedia(data []byte) ([]MediaItem, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(data)))
 	if err != nil {
 		return nil, errors.NewUpstream("SnapSave HTML parse failed")
 	}
 
-	var items []SnapSaveItem
+	var items []MediaItem
 	doc.Find("tbody tr").Each(func(_ int, s *goquery.Selection) {
 		quality := strings.TrimSpace(s.Find("td:nth-child(1)").Text())
 		thumbnail, _ := s.Find("img").Attr("src")
@@ -56,7 +56,7 @@ func parseSnapsave(data []byte) ([]SnapSaveItem, error) {
 		if !ok {
 			return
 		}
-		item := SnapSaveItem{Quality: quality, URL: href}
+		item := MediaItem{Quality: quality, URL: href}
 		if thumbnail != "" {
 			item.Thumbnail = &thumbnail
 		}

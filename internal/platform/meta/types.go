@@ -1,11 +1,5 @@
 package meta
 
-type SnapSaveItem struct {
-	Quality   string  `json:"quality"`
-	Thumbnail *string `json:"thumbnail,omitempty"`
-	URL       string  `json:"url"`
-}
-
 type ThreadsPhotoVariant struct {
 	Resolution string `json:"resolution"`
 	Width      int    `json:"width"`

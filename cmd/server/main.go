@@ -42,6 +42,9 @@ func main() {
 	r.Route("/api/spotify", func(r chi.Router) {
 		r.Get("/download", handler.HandleSpotifyDownload)
 	})
+	r.Route("/api/soundcloud", func(r chi.Router) {
+		r.Get("/download", handler.HandleSoundcloudDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
@@ -55,6 +58,7 @@ func main() {
 				"/api/pinterest/download",
 				"/api/terabox/download",
 				"/api/spotify/download",
+				"/api/soundcloud/download",
 			},
 		}, "Universal Downloader API is running")
 	})

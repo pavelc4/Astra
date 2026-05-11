@@ -30,6 +30,9 @@ func main() {
 		r.Get("/facebook/download", handler.HandleFacebookDownload)
 		r.Get("/threads/download", handler.HandleThreadsDownload)
 	})
+	r.Route("/api/reddit", func(r chi.Router) {
+		r.Get("/download", handler.HandleRedditDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
@@ -39,6 +42,7 @@ func main() {
 				"/api/meta/instagram/download",
 				"/api/meta/facebook/download",
 				"/api/meta/threads/download",
+				"/api/reddit/download",
 			},
 		}, "Universal Downloader API is running")
 	})

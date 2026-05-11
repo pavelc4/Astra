@@ -48,6 +48,9 @@ func main() {
 	r.Route("/api/capcut", func(r chi.Router) {
 		r.Get("/download", handler.HandleCapcutDownload)
 	})
+	r.Route("/api/linkedin", func(r chi.Router) {
+		r.Get("/download", handler.HandleLinkedinDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
@@ -63,6 +66,7 @@ func main() {
 				"/api/spotify/download",
 				"/api/soundcloud/download",
 				"/api/capcut/download",
+				"/api/linkedin/download",
 			},
 		}, "Universal Downloader API is running")
 	})

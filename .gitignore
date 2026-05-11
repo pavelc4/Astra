@@ -1,0 +1,13 @@
+/tmp/
+/vendor/
+
+# Binaries
+*.exe
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

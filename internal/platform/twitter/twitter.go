@@ -18,12 +18,12 @@ import (
 )
 
 type Result struct {
-	Platform  string              `json:"platform"`
-	Type      string              `json:"type"`
-	TweetID   *string             `json:"tweetId"`
-	Title     *string             `json:"title"`
-	Duration  *string             `json:"duration"`
-	Thumbnail *string             `json:"thumbnail"`
+	Platform  string               `json:"platform"`
+	Type      string               `json:"type"`
+	TweetID   *string              `json:"tweetId"`
+	Title     *string              `json:"title"`
+	Duration  *string              `json:"duration"`
+	Thumbnail *string              `json:"thumbnail"`
 	Downloads []types.DownloadItem `json:"downloads"`
 }
 

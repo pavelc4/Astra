@@ -10,5 +10,7 @@ require (
 
 require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/cavaliergopher/grab/v3 v3.0.1 // indirect
+	github.com/heilkit/tt v1.1.2 // indirect
 	golang.org/x/net v0.52.0 // indirect
 )

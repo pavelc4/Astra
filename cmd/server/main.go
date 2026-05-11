@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/lmittmann/tint"
 	"github.com/pavelc4/astra/internal/config"
 	"github.com/pavelc4/astra/internal/handler"
 )
@@ -16,8 +17,9 @@ import (
 func main() {
 	cfg := config.Load()
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+	slog.SetDefault(slog.New(tint.NewHandler(os.Stdout, &tint.Options{
+		Level:      slog.LevelInfo,
+		TimeFormat: time.StampMilli,
 	})))
 
 	r := chi.NewRouter()

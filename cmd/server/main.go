@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,10 +16,14 @@ import (
 func main() {
 	cfg := config.Load()
 
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
+	r.Use(requestLogger)
+	r.Use(middleware.Recoverer)
 
 	r.Route("/api/tiktok", func(r chi.Router) {
 		r.Get("/download", handler.HandleTikTokDownload)
@@ -71,7 +77,42 @@ func main() {
 		}, "Universal Downloader API is running")
 	})
 
+	endpoints := []string{
+		"GET  /",
+		"GET  /api/tiktok/download",
+		"GET  /api/twitter/download",
+		"GET  /api/meta/instagram/download",
+		"GET  /api/meta/facebook/download",
+		"GET  /api/meta/threads/download",
+		"GET  /api/reddit/download",
+		"GET  /api/pinterest/download",
+		"GET  /api/terabox/download",
+		"GET  /api/spotify/download",
+		"GET  /api/soundcloud/download",
+		"GET  /api/capcut/download",
+		"GET  /api/linkedin/download",
+	}
+
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
-	slog.Info("server starting", "addr", addr)
-	http.ListenAndServe(addr, r)
+	slog.Info("server starting", "addr", addr, "routes", len(endpoints))
+	for _, ep := range endpoints {
+		slog.Info("  " + ep)
+	}
+	if err := http.ListenAndServe(addr, r); err != nil {
+		slog.Error("server stopped", "error", err)
+	}
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		slog.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.Status(),
+			"duration", time.Since(start).String(),
+		)
+	})
 }

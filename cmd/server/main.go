@@ -33,6 +33,9 @@ func main() {
 	r.Route("/api/reddit", func(r chi.Router) {
 		r.Get("/download", handler.HandleRedditDownload)
 	})
+	r.Route("/api/pinterest", func(r chi.Router) {
+		r.Get("/download", handler.HandlePinterestDownload)
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		handler.OK(w, map[string]any{
@@ -43,6 +46,7 @@ func main() {
 				"/api/meta/facebook/download",
 				"/api/meta/threads/download",
 				"/api/reddit/download",
+				"/api/pinterest/download",
 			},
 		}, "Universal Downloader API is running")
 	})

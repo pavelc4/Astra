@@ -91,6 +91,18 @@ func (post Post) ID() string {
 	return post.VideoId
 }
 
+type MusicDetail struct {
+	Id         string `json:"id"`
+	Title      string `json:"title"`
+	Play       string `json:"play"`
+	Cover      string `json:"cover"`
+	Author     string `json:"author"`
+	Original   bool   `json:"original"`
+	Duration   int    `json:"duration"`
+	Album      string `json:"album"`
+	VideoCount int    `json:"video_count"`
+}
+
 type UserFeed struct {
 	Videos  []Post `json:"videos"`
 	Cursor  string `json:"cursor"`

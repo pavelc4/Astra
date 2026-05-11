@@ -14,6 +14,7 @@ func registerRoutes(r chi.Router) {
 	r.Route("/api/tiktok", func(r chi.Router) {
 		r.Get("/download", handler.HandleTikTokDownload)
 		r.Get("/profile", handler.HandleTikTokProfile)
+		r.Get("/music", handler.HandleTikTokMusic)
 	})
 	r.Route("/api/twitter", func(r chi.Router) {
 		r.Get("/download", handler.HandleTwitterDownload)
@@ -51,6 +52,7 @@ func registerRoutes(r chi.Router) {
 				"/health",
 				"/api/tiktok/download",
 				"/api/tiktok/profile",
+				"/api/tiktok/music",
 				"/api/twitter/download",
 				"/api/meta/instagram/download",
 				"/api/meta/facebook/download",

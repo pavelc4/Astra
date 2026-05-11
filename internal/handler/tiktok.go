@@ -24,6 +24,22 @@ func HandleTikTokDownload(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, data, "TikTok media fetched successfully")
 }
 
+func HandleTikTokMusic(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		response.HandleError(w, errors.NewValidation("url parameter is required"))
+		return
+	}
+
+	data, err := tiktok.FetchMusic(url)
+	if err != nil {
+		response.HandleError(w, err)
+		return
+	}
+
+	response.OK(w, data, "TikTok music fetched successfully")
+}
+
 func HandleTikTokProfile(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
 	if url == "" {

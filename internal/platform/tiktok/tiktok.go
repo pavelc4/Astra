@@ -131,6 +131,38 @@ func FetchUser(profileURL string) (*UserResult, error) {
 	}, nil
 }
 
+type MusicResult struct {
+	Platform string `json:"platform"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Audio    string `json:"audio"`
+	Cover    string `json:"cover"`
+	Author   string `json:"author"`
+	Duration int    `json:"duration"`
+	Videos   int    `json:"videos"`
+}
+
+func FetchMusic(musicURL string) (*MusicResult, error) {
+	detail, err := tt.GetMusicDetail(musicURL)
+	if err != nil {
+		return nil, errors.NewUpstream(fmt.Sprintf("TikTok music fetch failed: %s", err.Error()))
+	}
+	if detail == nil {
+		return nil, errors.NewUpstream("TikTok returned empty music response")
+	}
+
+	return &MusicResult{
+		Platform: "tiktok",
+		ID:       detail.Id,
+		Title:    detail.Title,
+		Audio:    detail.Play,
+		Cover:    detail.Cover,
+		Author:   detail.Author,
+		Duration: detail.Duration,
+		Videos:   detail.VideoCount,
+	}, nil
+}
+
 func extractUsername(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

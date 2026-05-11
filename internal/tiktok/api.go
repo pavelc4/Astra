@@ -252,6 +252,10 @@ func GetUserFeedRaw(uniqueID string, count int, cursor string) (*UserFeed, error
 	return RawParsed[UserFeed]("user/posts", query)
 }
 
+func GetMusicDetail(url string) (*MusicDetail, error) {
+	return RawParsed[MusicDetail]("music/info", map[string]string{"url": url})
+}
+
 func GetUserDetail(uniqueID string) (*UserDetail, error) {
 	query := map[string]string{"unique_id": uniqueID}
 	return RawParsed[UserDetail]("user/info", query)

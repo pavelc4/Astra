@@ -1,6 +1,7 @@
 package instagram
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +14,21 @@ import (
 	"github.com/pavelc4/astra/internal/httpclient"
 )
 
-func FetchMedia(targetURL string) ([]MediaItem, error) {
+var cookies string
+
+func SetCookies(c string) {
+	cookies = c
+}
+
+func fetchWithIG(url string) (*MediaInfo, error) {
+	client := NewIGClient(cookies)
+	if !client.HasCookies() {
+		return nil, fmt.Errorf("no session cookie")
+	}
+	return client.FetchMedia(url)
+}
+
+func fetchWithSnapsave(targetURL string) ([]MediaItem, error) {
 	form := url.Values{"url": {targetURL}}
 
 	req, err := http.NewRequest(http.MethodPost, "https://snapsave.app/action.php", strings.NewReader(form.Encode()))
@@ -39,10 +54,10 @@ func FetchMedia(targetURL string) ([]MediaItem, error) {
 		return nil, errors.NewUpstream("SnapSave response read failed")
 	}
 
-	return parseMedia(body)
+	return parseSnapsave(body)
 }
 
-func parseMedia(data []byte) ([]MediaItem, error) {
+func parseSnapsave(data []byte) ([]MediaItem, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(data)))
 	if err != nil {
 		return nil, errors.NewUpstream("SnapSave HTML parse failed")
@@ -69,3 +84,65 @@ func parseMedia(data []byte) ([]MediaItem, error) {
 
 	return items, nil
 }
+
+func FetchProfile(username string) (*UserProfile, error) {
+	client := NewIGClient(cookies)
+	if client.HasCookies() {
+		return client.FetchProfile(username)
+	}
+
+	return nil, fmt.Errorf("cookies required for profile fetch; set INSTAGRAM_COOKIES")
+}
+
+func FetchMedia(targetURL string) (*MediaInfo, error) {
+	if cookies != "" {
+		if info, err := fetchWithIG(targetURL); err == nil {
+			return info, nil
+		}
+	}
+
+	items, err := fetchWithSnapsave(targetURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MediaInfo{Items: items, Photos: items}, nil
+}
+
+func FetchProfileFromMedia(longURL string) (*UserProfile, error) {
+	client := NewIGClient(cookies)
+	if !client.HasCookies() {
+		return nil, fmt.Errorf("cookies required")
+	}
+
+	shortcode := extractShortcode(longURL)
+	if shortcode == "" {
+		return nil, fmt.Errorf("could not extract shortcode from URL")
+	}
+
+	url := fmt.Sprintf("%s/p/%s/?__a=1", baseURL, shortcode)
+	data, err := client.getJSON(url)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp struct {
+		GraphQL struct {
+			ShortcodeMedia struct {
+				Owner struct {
+					Username string `json:"username"`
+				} `json:"owner"`
+			} `json:"shortcode_media"`
+		} `json:"graphql"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse: %w", err)
+	}
+
+	if resp.GraphQL.ShortcodeMedia.Owner.Username == "" {
+		return nil, fmt.Errorf("could not find owner")
+	}
+
+	return client.FetchProfile(resp.GraphQL.ShortcodeMedia.Owner.Username)
+}
+

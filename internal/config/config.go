@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"os"
+
+	"github.com/pavelc4/astra/internal/instagram"
+)
 
 type Config struct {
 	Port string
@@ -8,10 +12,16 @@ type Config struct {
 }
 
 func Load() Config {
-	return Config{
+	cfg := Config{
 		Port: getEnv("PORT", "3000"),
 		Host: getEnv("HOST", "0.0.0.0"),
 	}
+
+	if c := os.Getenv("INSTAGRAM_COOKIES"); c != "" {
+		instagram.SetCookies(c)
+	}
+
+	return cfg
 }
 
 func getEnv(key, fallback string) string {

@@ -22,6 +22,17 @@ type UserProfile struct {
 	ExternalURL   string `json:"external_url,omitempty"`
 }
 
+type StoryItem struct {
+	TakenAt int64       `json:"taken_at"`
+	Images  []MediaItem `json:"images,omitempty"`
+	Videos  []MediaItem `json:"videos,omitempty"`
+}
+
+type StoriesResult struct {
+	Username string      `json:"username"`
+	Items    []StoryItem `json:"items"`
+}
+
 type MediaInfo struct {
 	Items       []MediaItem        `json:"items"`
 	Caption     string             `json:"caption,omitempty"`

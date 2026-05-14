@@ -18,6 +18,11 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 	return client.FetchMedia(targetURL)
 }
 
+func FetchStories(username string) (*StoriesResult, error) {
+	client := NewIGClient(cookies)
+	return client.FetchStories(username)
+}
+
 func FetchProfileFromMedia(longURL string) (*UserProfile, error) {
 	shortcode := extractShortcode(longURL)
 	if shortcode == "" {

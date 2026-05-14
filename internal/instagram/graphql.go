@@ -81,6 +81,91 @@ func (c *IGClient) FetchMedia(longURL string) (*MediaInfo, error) {
 	return convertMediaItem(&resp.Items[0]), nil
 }
 
+// getUserPK fetches the numeric user ID for a given Instagram username.
+func (c *IGClient) getUserPK(username string) (string, error) {
+	url := fmt.Sprintf("%s/users/%s/usernameinfo/", apiURL, username)
+	data, err := c.getJSON(url)
+	if err != nil {
+		return "", err
+	}
+
+	var resp struct {
+		User struct {
+			Pk string `json:"pk"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("parse user pk: %w", err)
+	}
+	if resp.User.Pk == "" {
+		return "", fmt.Errorf("user not found")
+	}
+	return resp.User.Pk, nil
+}
+
+func (c *IGClient) FetchStories(username string) (*StoriesResult, error) {
+	pk, err := c.getUserPK(username)
+	if err != nil {
+		return nil, fmt.Errorf("get user id: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/feed/user/%s/reel_media/", apiURL, pk)
+	data, err := c.getJSON(url)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp struct {
+		ID    string `json:"id"`
+		Items []struct {
+			Pk          string `json:"pk"`
+			MediaType   int    `json:"media_type"`
+			TakenAt     int64  `json:"taken_at"`
+			VideoDuration float64 `json:"video_duration,omitempty"`
+			OriginalWidth  int  `json:"original_width"`
+			OriginalHeight int  `json:"original_height"`
+			VideoVersions []struct {
+				Type int    `json:"type"`
+				URL  string `json:"url"`
+			} `json:"video_versions"`
+			ImageVersions2 *struct {
+				Candidates []struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"candidates"`
+			} `json:"image_versions2"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse stories: %w", err)
+	}
+
+	result := &StoriesResult{Username: username}
+	for _, item := range resp.Items {
+		story := StoryItem{TakenAt: item.TakenAt}
+
+		if item.MediaType == 2 {
+			for _, v := range item.VideoVersions {
+				story.Videos = append(story.Videos, MediaItem{URL: v.URL})
+			}
+		} else {
+			if item.ImageVersions2 != nil && len(item.ImageVersions2.Candidates) > 0 {
+				story.Images = append(story.Images, MediaItem{URL: item.ImageVersions2.Candidates[0].URL})
+			}
+		}
+
+		result.Items = append(result.Items, story)
+	}
+
+	if len(result.Items) == 0 {
+		return nil, fmt.Errorf("no stories available")
+	}
+
+	return result, nil
+}
+
 func convertMediaItem(item *mobileMediaItem) *MediaInfo {
 	result := &MediaInfo{}
 

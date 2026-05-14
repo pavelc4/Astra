@@ -14,6 +14,14 @@ type InstagramResult struct {
 	Raw         []instagram.MediaItem `json:"raw,omitempty"`
 }
 
+func FetchInstagramProfile(rawURL string) (*instagram.UserProfile, error) {
+	if username := instagram.ExtractUsername(rawURL); username != "" {
+		return instagram.FetchProfile(username)
+	}
+
+	return instagram.FetchProfileFromMedia(rawURL)
+}
+
 func FetchInstagramData(url string) (*InstagramResult, error) {
 	info, err := instagram.FetchMedia(url)
 	if err != nil {

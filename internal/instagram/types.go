@@ -32,6 +32,31 @@ type MediaInfo struct {
 	Videos      []MediaItem        `json:"videos,omitempty"`
 }
 
+func ExtractUsername(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	rawURL = strings.TrimSuffix(rawURL, "/")
+
+	if idx := strings.Index(rawURL, "instagram.com/"); idx != -1 {
+		path := rawURL[idx+14:]
+
+		if strings.HasPrefix(path, "p/") || strings.HasPrefix(path, "reel/") || strings.HasPrefix(path, "reels/") || strings.HasPrefix(path, "tv/") {
+			return ""
+		}
+
+		if e := strings.Index(path, "/"); e != -1 {
+			path = path[:e]
+		}
+		if e := strings.Index(path, "?"); e != -1 {
+			path = path[:e]
+		}
+		if path != "" && !strings.ContainsAny(path, "?#") {
+			return path
+		}
+	}
+
+	return ""
+}
+
 func extractShortcode(rawURL string) string {
 	rawURL = strings.TrimSpace(rawURL)
 

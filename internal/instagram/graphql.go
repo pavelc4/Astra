@@ -6,50 +6,49 @@ import (
 )
 
 func (c *IGClient) FetchProfile(username string) (*UserProfile, error) {
-	url := fmt.Sprintf("%s/api/v1/users/web_profile_info/?username=%s", baseURL, username)
+	url := fmt.Sprintf("%s/users/%s/usernameinfo/", apiURL, username)
 	data, err := c.getJSON(url)
 	if err != nil {
 		return nil, err
 	}
 
 	var resp struct {
-		Data struct {
-			User struct {
-				Username        string `json:"username"`
-				FullName        string `json:"full_name"`
-				ProfilePicURL   string `json:"profile_pic_url"`
-				ProfilePicURLHD string `json:"profile_pic_url_hd"`
-				Biography       string `json:"biography"`
-				FollowerCount   int    `json:"follower_count"`
-				FollowingCount  int    `json:"following_count"`
-				MediaCount      int    `json:"media_count"`
-				IsVerified      bool   `json:"is_verified"`
-				IsPrivate       bool   `json:"is_private"`
-				ExternalURL     string `json:"external_url"`
-			} `json:"user"`
-		} `json:"data"`
+		User struct {
+			Pk              string `json:"pk"`
+			Username        string `json:"username"`
+			FullName        string `json:"full_name"`
+			ProfilePicURL   string `json:"profile_pic_url"`
+			ProfilePicURLHD string `json:"profile_pic_url_hd"`
+			Biography       string `json:"biography"`
+			FollowerCount   int    `json:"follower_count"`
+			FollowingCount  int    `json:"following_count"`
+			MediaCount      int    `json:"media_count"`
+			IsVerified      bool   `json:"is_verified"`
+			IsPrivate       bool   `json:"is_private"`
+			ExternalURL     string `json:"external_url"`
+		} `json:"user"`
 	}
 
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("parse profile: %w", err)
 	}
 
-	if resp.Data.User.Username == "" {
+	if resp.User.Username == "" {
 		return nil, fmt.Errorf("user not found")
 	}
 
 	return &UserProfile{
-		Username:    resp.Data.User.Username,
-		FullName:    resp.Data.User.FullName,
-		Avatar:      resp.Data.User.ProfilePicURL,
-		AvatarHD:    resp.Data.User.ProfilePicURLHD,
-		Biography:   resp.Data.User.Biography,
-		Followers:   resp.Data.User.FollowerCount,
-		Following:   resp.Data.User.FollowingCount,
-		Posts:       resp.Data.User.MediaCount,
-		Verified:    resp.Data.User.IsVerified,
-		Private:     resp.Data.User.IsPrivate,
-		ExternalURL: resp.Data.User.ExternalURL,
+		Username:    resp.User.Username,
+		FullName:    resp.User.FullName,
+		Avatar:      resp.User.ProfilePicURL,
+		AvatarHD:    resp.User.ProfilePicURLHD,
+		Biography:   resp.User.Biography,
+		Followers:   resp.User.FollowerCount,
+		Following:   resp.User.FollowingCount,
+		Posts:       resp.User.MediaCount,
+		Verified:    resp.User.IsVerified,
+		Private:     resp.User.IsPrivate,
+		ExternalURL: resp.User.ExternalURL,
 	}, nil
 }
 
@@ -59,104 +58,73 @@ func (c *IGClient) FetchMedia(longURL string) (*MediaInfo, error) {
 		return nil, fmt.Errorf("could not extract shortcode from URL")
 	}
 
-	url := fmt.Sprintf("%s/p/%s/?__a=1", baseURL, shortcode)
+	mediaID, err := extractMediaID(shortcode)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/media/%s/info/", apiURL, mediaID)
 	data, err := c.getJSON(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseMediaJSON(data)
-}
-
-type graphqlPostData struct {
-	GraphQL struct {
-		ShortcodeMedia struct {
-			Typename    string `json:"__typename"`
-			Shortcode   string `json:"shortcode"`
-			Caption     string `json:"caption"`
-			Owner       struct {
-				Username string `json:"username"`
-			} `json:"owner"`
-			VideoURL      string `json:"video_url"`
-			VideoDuration int    `json:"video_duration"`
-			DisplayURL    string `json:"display_url"`
-			ThumbnailSrc  string `json:"thumbnail_src"`
-			IsVideo       bool   `json:"is_video"`
-			EdgeMediaToCaption struct {
-				Edges []struct {
-					Node struct {
-						Text string `json:"text"`
-					} `json:"node"`
-				} `json:"edges"`
-			} `json:"edge_media_to_caption"`
-			EdgeSidecarToChildren struct {
-				Edges []struct {
-					Node struct {
-						Typename   string `json:"__typename"`
-						VideoURL   string `json:"video_url"`
-						DisplayURL string `json:"display_url"`
-						IsVideo    bool   `json:"is_video"`
-					} `json:"node"`
-				} `json:"edges"`
-			} `json:"edge_sidecar_to_children"`
-			ClipsMusicAttributionInfo struct {
-				SongName string `json:"song_name"`
-				ArtistName string `json:"artist_name"`
-				AudioSrc string `json:"audio_src"`
-				AudioID   string `json:"audio_id"`
-			} `json:"clips_music_attribution_info"`
-		} `json:"shortcode_media"`
-	} `json:"graphql"`
-}
-
-func parseMediaJSON(data []byte) (*MediaInfo, error) {
-	var info graphqlPostData
-	if err := json.Unmarshal(data, &info); err != nil {
+	var resp mobileInfoResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("parse media: %w", err)
 	}
 
-	media := info.GraphQL.ShortcodeMedia
-	if media.Shortcode == "" {
+	if len(resp.Items) == 0 {
 		return nil, fmt.Errorf("media not found")
 	}
 
+	return convertMediaItem(&resp.Items[0]), nil
+}
+
+func convertMediaItem(item *mobileMediaItem) *MediaInfo {
 	result := &MediaInfo{}
 
-	caption := media.Caption
-	if caption == "" && len(media.EdgeMediaToCaption.Edges) > 0 {
-		caption = media.EdgeMediaToCaption.Edges[0].Node.Text
+	if item.Caption != nil {
+		result.Caption = item.Caption.Text
 	}
-	result.Caption = caption
-	result.OwnerUser = media.Owner.Username
-
-	if media.ClipsMusicAttributionInfo.AudioSrc != "" {
-		result.AudioURL = media.ClipsMusicAttributionInfo.AudioSrc
+	if item.User != nil {
+		result.OwnerUser = item.User.Username
 	}
 
-	if media.Typename == "GraphSidecar" {
-		for _, edge := range media.EdgeSidecarToChildren.Edges {
-			node := edge.Node
-			if node.IsVideo {
-				item := MediaItem{Quality: "HD", URL: node.VideoURL}
-				if node.DisplayURL != "" {
-					item.Thumbnail = &node.DisplayURL
+	if item.MediaType == 2 {
+		// single video
+		for _, v := range item.VideoVersions {
+			result.Videos = append(result.Videos, MediaItem{
+				Quality: fmt.Sprintf("%dx%d", v.Width, v.Height),
+				URL:     v.URL,
+			})
+		}
+	} else if item.MediaType == 8 {
+		// carousel
+		for _, cm := range item.CarouselMedia {
+			if cm.MediaType == 2 {
+				for _, v := range cm.VideoVersions {
+					result.Videos = append(result.Videos, MediaItem{URL: v.URL})
 				}
-				result.Videos = append(result.Videos, item)
 			} else {
-				result.Photos = append(result.Photos, MediaItem{URL: node.DisplayURL})
+				if cm.ImageVersions2 != nil && len(cm.ImageVersions2.Candidates) > 0 {
+					result.Photos = append(result.Photos, MediaItem{URL: cm.ImageVersions2.Candidates[0].URL})
+				}
 			}
 		}
-	} else if media.IsVideo {
-		item := MediaItem{Quality: "HD", URL: media.VideoURL}
-		if media.DisplayURL != "" {
-			item.Thumbnail = &media.DisplayURL
-		}
-		result.Videos = append(result.Videos, item)
 	} else {
-		result.Photos = append(result.Photos, MediaItem{URL: media.DisplayURL})
+		// single photo
+		if item.ImageVersions2 != nil && len(item.ImageVersions2.Candidates) > 0 {
+			result.Photos = append(result.Photos, MediaItem{URL: item.ImageVersions2.Candidates[0].URL})
+		}
+	}
+
+	// audio from clips metadata
+	if item.ClipsMetadata != nil && item.ClipsMetadata.MusicInfo != nil {
+		result.AudioURL = item.ClipsMetadata.MusicInfo.AudioSrc
 	}
 
 	result.Items = append(result.Photos, result.Videos...)
 
-	return result, nil
+	return result
 }

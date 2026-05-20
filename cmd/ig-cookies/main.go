@@ -4,34 +4,36 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pavelc4/astra/cmd/ig-cookies/extractor"
 )
 
-const usage = `ig-cookie-extractor — extract Instagram sessionid + csrftoken from your browser
+const usage = `ig-cookie-extractor — extract Instagram / Facebook cookies from your browser
 
 Usage:
-  ig-cookie-extractor -browser <firefox|chromium> [options]
+  ig-cookie-extractor -browser <firefox|chromium> -platform <instagram|facebook> [options]
 
 Options:
-  -browser  firefox|chromium   Browser backend (required)
-  -profile  /path/to/profile   Override profile location (optional, auto-detect by default)
-  -exec     /path/to/binary    Override browser binary (optional, chromium only)
-  -out      export|env|raw     Output format (default: export)
+  -browser  firefox|chromium          Browser backend (required)
+  -platform instagram|facebook         Platform (default: instagram)
+  -profile  /path/to/profile          Override profile location (optional)
+  -exec     /path/to/binary           Override browser binary (optional, chromium only)
+  -out      export|env|raw            Output format (default: export)
 
 Example:
   ig-cookie-extractor -browser firefox
-  ig-cookie-extractor -browser firefox -profile ~/.zen/abc123.default-release
-  ig-cookie-extractor -browser chromium -exec /usr/bin/brave-browser
-  ig-cookie-extractor -browser chromium -out raw
+  ig-cookie-extractor -browser firefox -platform facebook
+  ig-cookie-extractor -browser chromium -exec /usr/bin/brave-browser -out raw
 `
 
 func main() {
 	var (
-		browserFlag = flag.String("browser", "", "Browser backend: firefox | chromium")
-		profileFlag = flag.String("profile", "", "Path to browser profile")
-		execFlag    = flag.String("exec", "", "Path to browser binary")
-		outFlag     = flag.String("out", "export", "Output format: export | env | raw")
+		browserFlag  = flag.String("browser", "", "Browser backend: firefox | chromium")
+		platformFlag = flag.String("platform", "instagram", "Platform: instagram | facebook")
+		profileFlag  = flag.String("profile", "", "Path to browser profile")
+		execFlag     = flag.String("exec", "", "Path to browser binary")
+		outFlag      = flag.String("out", "export", "Output format: export | env | raw")
 	)
 
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
@@ -44,20 +46,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("=== Instagram Cookie Extractor ===")
+	platform := *platformFlag
+	if platform != "instagram" && platform != "facebook" {
+		fmt.Fprintf(os.Stderr, "Error: unknown platform '%s'. Use 'instagram' or 'facebook'\n", platform)
+		os.Exit(1)
+	}
+
+	label := "Instagram"
+	envVar := "INSTAGRAM_COOKIES"
+	if platform == "facebook" {
+		label = "Facebook"
+		envVar = "FACEBOOK_COOKIES"
+	}
+
+	fmt.Printf("=== %s Cookie Extractor ===\n", label)
 	fmt.Println()
 
 	var ex extractor.Extractor
 
 	switch *browserFlag {
 	case "firefox":
-		// NewFirefox does not return an error —
-		// the profile is resolved lazily during Extract().
-		ex = extractor.NewFirefox(*profileFlag)
+		ex = extractor.NewFirefox(*profileFlag, platform)
 
 	case "chromium":
 		var err error
-		ex, err = extractor.NewChromiumExtractor(*profileFlag, *execFlag)
+		ex, err = extractor.NewChromiumExtractor(*profileFlag, *execFlag, platform)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -78,11 +91,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cookieStr := fmt.Sprintf(
-		"sessionid=%s; csrftoken=%s",
-		cookies.SessionID,
-		cookies.CSRFToken,
-	)
+	cookieStr := formatCookieString(cookies, platform)
 
 	fmt.Println()
 	fmt.Println("Cookies extracted successfully! ")
@@ -90,10 +99,10 @@ func main() {
 
 	switch *outFlag {
 	case "export":
-		fmt.Printf("export INSTAGRAM_COOKIES=\"%s\"\n", cookieStr)
+		fmt.Printf("export %s=\"%s\"\n", envVar, cookieStr)
 
 	case "env":
-		fmt.Printf("INSTAGRAM_COOKIES=\"%s\"\n", cookieStr)
+		fmt.Printf("%s=\"%s\"\n", envVar, cookieStr)
 
 	case "raw":
 		fmt.Println(cookieStr)
@@ -104,6 +113,26 @@ func main() {
 			"Warning: unknown format '%s', falling back to 'export'\n\n",
 			*outFlag,
 		)
-		fmt.Printf("export INSTAGRAM_COOKIES=\"%s\"\n", cookieStr)
+		fmt.Printf("export %s=\"%s\"\n", envVar, cookieStr)
 	}
+}
+
+func formatCookieString(c *extractor.Cookies, platform string) string {
+	var parts []string
+	switch platform {
+	case "facebook":
+		for _, name := range []string{"c_user", "xs", "fr", "dpr"} {
+			if v, ok := c.Values[name]; ok {
+				parts = append(parts, name+"="+v)
+			}
+		}
+	default:
+		if v, ok := c.Values["sessionid"]; ok {
+			parts = append(parts, "sessionid="+v)
+		}
+		if v, ok := c.Values["csrftoken"]; ok {
+			parts = append(parts, "csrftoken="+v)
+		}
+	}
+	return strings.Join(parts, "; ")
 }

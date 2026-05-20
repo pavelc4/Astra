@@ -15,19 +15,47 @@ import (
 // Works with: Firefox, Zen Browser, LibreWolf, Floorp, Waterfox, etc.
 type firefoxExtractor struct {
 	profileHint string // optional: override profile directory
+	platform    string // "instagram" or "facebook"
 }
 
 // NewFirefox creates a Firefox/Zen extractor.
 // Pass an empty profileHint to use auto-detection.
-func NewFirefox(profileHint string) Extractor {
-	return &firefoxExtractor{profileHint: profileHint}
+func NewFirefox(profileHint, platform string) Extractor {
+	return &firefoxExtractor{profileHint: profileHint, platform: platform}
 }
 
 func (f *firefoxExtractor) Name() string {
 	return "Firefox/Zen (SQLite)"
 }
 
-func (f *firefoxExtractor) Extract() (*InstagramCookies, error) {
+func (f *firefoxExtractor) hostFilter() string {
+	switch f.platform {
+	case "facebook":
+		return "%facebook.com"
+	default:
+		return "%instagram.com"
+	}
+}
+
+func (f *firefoxExtractor) cookieNames() []string {
+	switch f.platform {
+	case "facebook":
+		return []string{"c_user", "xs"}
+	default:
+		return []string{"sessionid", "csrftoken"}
+	}
+}
+
+func (f *firefoxExtractor) platformLabel() string {
+	switch f.platform {
+	case "facebook":
+		return "Facebook"
+	default:
+		return "Instagram"
+	}
+}
+
+func (f *firefoxExtractor) Extract() (*Cookies, error) {
 	dbPath, err := f.resolveCookiesDB()
 	if err != nil {
 		return nil, fmt.Errorf("resolve cookies.sqlite: %w", err)
@@ -43,7 +71,7 @@ func (f *firefoxExtractor) Extract() (*InstagramCookies, error) {
 	}
 	defer os.Remove(tmpPath)
 
-	return queryFirefoxDB(tmpPath)
+	return queryFirefoxDB(tmpPath, f.hostFilter(), f.cookieNames(), f.platformLabel())
 }
 
 // resolveCookiesDB finds the first valid cookies.sqlite on the system.
@@ -141,7 +169,7 @@ func (f *firefoxExtractor) resolveCookiesDB() (string, error) {
 	return "", fmt.Errorf("cookies.sqlite not found in any known path")
 }
 
-func queryFirefoxDB(path string) (*InstagramCookies, error) {
+func queryFirefoxDB(path, hostFilter string, cookieNames []string, label string) (*Cookies, error) {
 	dsn := fmt.Sprintf("file:%s?mode=ro&immutable=1", path)
 
 	db, err := sql.Open("sqlite3", dsn)
@@ -150,31 +178,26 @@ func queryFirefoxDB(path string) (*InstagramCookies, error) {
 	}
 	defer db.Close()
 
-	const query = `
-		SELECT name, value
-		FROM   moz_cookies
-		WHERE  host LIKE '%instagram.com'
-		  AND  name IN ('sessionid', 'csrftoken')
-		ORDER  BY lastAccessed DESC
-	`
-
-	rows, err := db.Query(query)
+	query := `SELECT name, value FROM moz_cookies WHERE host LIKE ? ORDER BY lastAccessed DESC`
+	rows, err := db.Query(query, hostFilter)
 	if err != nil {
 		return nil, fmt.Errorf("query moz_cookies: %w", err)
 	}
 	defer rows.Close()
 
-	cookies := make(map[string]string, 2)
+	vals := make(map[string]string)
+	seen := make(map[string]bool)
 
 	for rows.Next() {
 		var name, value string
-
 		if err := rows.Scan(&name, &value); err != nil {
 			return nil, err
 		}
-
-		if _, exists := cookies[name]; !exists {
-			cookies[name] = value
+		for _, cn := range cookieNames {
+			if name == cn && !seen[name] {
+				vals[name] = value
+				seen[name] = true
+			}
 		}
 	}
 
@@ -182,16 +205,16 @@ func queryFirefoxDB(path string) (*InstagramCookies, error) {
 		return nil, err
 	}
 
-	if cookies["sessionid"] == "" {
-		return nil, fmt.Errorf(
-			"sessionid not found — open instagram.com in your browser first, then try again",
-		)
+	for _, cn := range cookieNames {
+		if vals[cn] == "" {
+			return nil, fmt.Errorf(
+				"%s not found — open %s in your browser first, then try again",
+				cn, label,
+			)
+		}
 	}
 
-	return &InstagramCookies{
-		SessionID: cookies["sessionid"],
-		CSRFToken: cookies["csrftoken"],
-	}, nil
+	return &Cookies{Values: vals}, nil
 }
 
 func copyToTemp(src string) (string, error) {

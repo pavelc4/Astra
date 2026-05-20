@@ -1,12 +1,12 @@
 package extractor
 
-// InstagramCookies holds the extracted Instagram session cookies.
-type InstagramCookies struct {
-	SessionID string
-	CSRFToken string
+// Cookies holds extracted session cookies from a browser.
+// The map key is the cookie name (e.g. "sessionid", "csrftoken", "c_user", "xs").
+type Cookies struct {
+	Values map[string]string
 }
 
 // Extractor is the interface implemented by each browser backend.
 type Extractor interface {
-	Extract() (*InstagramCookies, error)
+	Extract() (*Cookies, error)
 }

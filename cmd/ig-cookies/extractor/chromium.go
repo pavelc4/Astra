@@ -14,16 +14,17 @@ import (
 )
 
 // ChromiumExtractor launches a Chromium-based browser via CDP and extracts
-// Instagram cookies interactively.
+// cookies interactively.
 type ChromiumExtractor struct {
 	ProfilePath string
 	ExecPath    string
+	Platform    string // "instagram" or "facebook"
 }
 
 // NewChromiumExtractor returns a ChromiumExtractor.
 // Pass empty strings to auto-detect the profile and browser binary
 // (Chrome, Chromium, Brave, Edge, Vivaldi).
-func NewChromiumExtractor(profilePath, execPath string) (*ChromiumExtractor, error) {
+func NewChromiumExtractor(profilePath, execPath, platform string) (*ChromiumExtractor, error) {
 	if profilePath == "" {
 		p, err := detectChromiumProfile()
 		if err != nil {
@@ -43,12 +44,31 @@ func NewChromiumExtractor(profilePath, execPath string) (*ChromiumExtractor, err
 	return &ChromiumExtractor{
 		ProfilePath: profilePath,
 		ExecPath:    execPath,
+		Platform:    platform,
 	}, nil
 }
 
-// Extract launches the browser, navigates to Instagram, waits for the user
-// to confirm login, then retrieves sessionid + csrftoken via CDP.
-func (c *ChromiumExtractor) Extract() (*InstagramCookies, error) {
+func (c *ChromiumExtractor) targetDomain() (domain, label string) {
+	switch c.Platform {
+	case "facebook":
+		return "https://www.facebook.com/", "Facebook"
+	default:
+		return "https://www.instagram.com/", "Instagram"
+	}
+}
+
+func (c *ChromiumExtractor) requiredCookies() []string {
+	switch c.Platform {
+	case "facebook":
+		return []string{"c_user", "xs"}
+	default:
+		return []string{"sessionid", "csrftoken"}
+	}
+}
+
+// Extract launches the browser, navigates to the target platform, waits for
+// the user to confirm login, then retrieves session cookies via CDP.
+func (c *ChromiumExtractor) Extract() (*Cookies, error) {
 	profile := c.ProfilePath
 
 	if isProfileLocked(c.ProfilePath) {
@@ -83,22 +103,24 @@ func (c *ChromiumExtractor) Extract() (*InstagramCookies, error) {
 	ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
+	domain, label := c.targetDomain()
+
 	fmt.Printf("Using browser binary : %s\n", c.ExecPath)
 	fmt.Printf("Using profile        : %s\n", profile)
 	fmt.Println()
-	fmt.Println("The browser will open. Log in to Instagram, then press ENTER.")
+	fmt.Printf("The browser will open. Log in to %s, then press ENTER.\n", label)
 	fmt.Println()
 
 	if err := chromedp.Run(ctx,
-		chromedp.Navigate("https://www.instagram.com/"),
+		chromedp.Navigate(domain),
 	); err != nil {
-		return nil, fmt.Errorf("failed to navigate to Instagram: %w", err)
+		return nil, fmt.Errorf("failed to navigate to %s: %w", label, err)
 	}
 
 	fmt.Print("Press ENTER once you are logged in... ")
 	fmt.Scanln()
 
-	var result *InstagramCookies
+	var result *Cookies
 
 	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		cdpCookies, err := storage.GetCookies().Do(ctx)
@@ -106,29 +128,21 @@ func (c *ChromiumExtractor) Extract() (*InstagramCookies, error) {
 			return fmt.Errorf("get cookies: %w", err)
 		}
 
-		var sessionID, csrfToken string
-
+		vals := make(map[string]string)
 		for _, co := range cdpCookies {
-			switch co.Name {
-			case "sessionid":
-				sessionID = co.Value
+			vals[co.Name] = co.Value
+		}
 
-			case "csrftoken":
-				csrfToken = co.Value
+		for _, name := range c.requiredCookies() {
+			if vals[name] == "" {
+				return fmt.Errorf(
+					"%s not found — make sure you are logged into %s",
+					name, label,
+				)
 			}
 		}
 
-		if sessionID == "" {
-			return fmt.Errorf(
-				"sessionid not found — make sure you are logged into Instagram",
-			)
-		}
-
-		result = &InstagramCookies{
-			SessionID: sessionID,
-			CSRFToken: csrfToken,
-		}
-
+		result = &Cookies{Values: vals}
 		return nil
 	}))
 

@@ -134,26 +134,70 @@ func FetchData(targetURL string) (*Result, error) {
 
 	var downloads []DownloadItem
 
-	// 4. Extract video streams (if present)
+	// videoQualities defines ordered quality variants to generate direct mp4 URLs.
+	// Pinterest stores video segments as CMAF (.cmfv) files which are served as video/mp4.
+	type videoQuality struct {
+		Suffix  string
+		Label   string
+	}
+	qualities := []videoQuality{
+		{"720w", "720p"},
+		{"540w", "540p"},
+		{"360w", "360p"},
+		{"240w", "240p"},
+	}
+
+	// reM3U8Sig extracts the video signature from a Pinterest HLS m3u8 URL.
+	// e.g. https://v1.pinimg.com/videos/iht/hls/11/09/fe/1109feab967bec9c087b8a1c799ee244.m3u8
+	reM3U8Sig := regexp.MustCompile(`/hls/([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{32})\.m3u8`)
+
+	// extractVideoDownloads converts a video_list map into direct MP4 DownloadItems.
+	extractVideoDownloads := func(videoList map[string]interface{}) []DownloadItem {
+		var items []DownloadItem
+		for _, val := range videoList {
+			vMap, ok := val.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			u, ok := vMap["url"].(string)
+			if !ok || u == "" {
+				continue
+			}
+			// Try to extract signature and build direct mp4 URLs
+			matches := reM3U8Sig.FindStringSubmatch(u)
+			if len(matches) == 5 {
+				sig := matches[4]
+				p1, p2, p3 := matches[1], matches[2], matches[3]
+			baseURL := fmt.Sprintf("https://v1.pinimg.com/videos/iht/hls/%s/%s/%s", p1, p2, p3)
+				for _, q := range qualities {
+					directURL := fmt.Sprintf("%s/%s_%s.cmfv", baseURL, sig, q.Suffix)
+					items = append(items, DownloadItem{
+						Quality: q.Label,
+						Format:  "mp4",
+						URL:     directURL,
+					})
+				}
+				return items // return after first successful signature extraction
+			}
+			// Fallback: return the m3u8 as-is if no signature found
+			items = append(items, DownloadItem{
+				Quality: "hls",
+				Format:  "m3u8",
+				URL:     u,
+			})
+			return items
+		}
+		return items
+	}
+
+	// 4. Extract video streams (if present at root level)
 	videoFound := false
 	if videos, ok := data["videos"].(map[string]interface{}); ok && videos != nil {
 		if videoList, ok := videos["video_list"].(map[string]interface{}); ok {
-			for key, val := range videoList {
-				if vMap, ok := val.(map[string]interface{}); ok {
-					if u, ok := vMap["url"].(string); ok && u != "" {
-						quality := key
-						format := "mp4"
-						if regexp.MustCompile(`(?i)\.m3u8`).MatchString(u) {
-							format = "m3u8"
-						}
-						downloads = append(downloads, DownloadItem{
-							Quality: quality,
-							Format:  format,
-							URL:     u,
-						})
-						videoFound = true
-					}
-				}
+			items := extractVideoDownloads(videoList)
+			if len(items) > 0 {
+				downloads = append(downloads, items...)
+				videoFound = true
 			}
 		}
 	}
@@ -169,22 +213,10 @@ func FetchData(targetURL string) (*Result, error) {
 								if bMap, ok := block.(map[string]interface{}); ok {
 									if videoObj, ok := bMap["video"].(map[string]interface{}); ok {
 										if videoList, ok := videoObj["video_list"].(map[string]interface{}); ok {
-											for key, val := range videoList {
-												if vMap, ok := val.(map[string]interface{}); ok {
-													if u, ok := vMap["url"].(string); ok && u != "" {
-														quality := key
-														format := "mp4"
-														if regexp.MustCompile(`(?i)\.m3u8`).MatchString(u) {
-															format = "m3u8"
-														}
-														downloads = append(downloads, DownloadItem{
-															Quality: quality,
-															Format:  format,
-															URL:     u,
-														})
-														videoFound = true
-													}
-												}
+											items := extractVideoDownloads(videoList)
+											if len(items) > 0 {
+												downloads = append(downloads, items...)
+												videoFound = true
 											}
 										}
 									}

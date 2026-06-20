@@ -221,6 +221,26 @@ func fetchPhotosViaCrawler(targetURL, ck string) (*MediaInfo, error) {
 		info.Photos = append(info.Photos, MediaItem{URL: clean})
 	}
 
+	// Fallback photo extraction for dynamically loaded/Comet page HTML (e.g. private groups/posts)
+	if len(info.Photos) == 0 {
+		// Post photos typically reside under /t39.xxxx or /v/t39.xxxx and have _n.jpg/_n.png/_n.webp in their filenames
+		cometImageRe := regexp.MustCompile(`https?:\\?/\\?/[^\s"'>]+?fbcdn\.net[^\s"'>]+?(?:_n\.[a-zA-Z0-9]+|\/t39\.[^\s"'>]+?\.[a-zA-Z0-9]+)[^\s"'>]*`)
+		cometMatches := cometImageRe.FindAllString(htmlStr, -1)
+
+		for _, m := range cometMatches {
+			clean := cleanJSURL(m)
+			// Skip icons, profile pictures and small thumbnails
+			if strings.Contains(clean, "static.xx") || strings.Contains(clean, "rsrc.php") || strings.Contains(clean, "/cp0/") || strings.Contains(clean, "/s40x40/") || strings.Contains(clean, "/s100x100/") {
+				continue
+			}
+			if seen[clean] {
+				continue
+			}
+			seen[clean] = true
+			info.Photos = append(info.Photos, MediaItem{URL: clean})
+		}
+	}
+
 	if len(info.Photos) > 0 {
 		info.Thumbnail = &info.Photos[0].URL
 	}

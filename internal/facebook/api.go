@@ -32,9 +32,14 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 	cookiesMu.RUnlock()
 
 	// 1. Resolve redirect of share/watch URL
-	resolvedURL, err := resolveRedirect(targetURL)
+	resolvedURL, err := resolveRedirect(targetURL, ck)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if we were redirected to a login page
+	if strings.Contains(resolvedURL, "/login/") || strings.Contains(resolvedURL, "/login.php") {
+		return nil, fmt.Errorf("this post or group is private - login required (please check or refresh your FACEBOOK_COOKIES)")
 	}
 
 	// 2. Determine if it is a video URL
@@ -121,7 +126,7 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 	return info, nil
 }
 
-func resolveRedirect(rawURL string) (string, error) {
+func resolveRedirect(rawURL, ck string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
@@ -137,6 +142,9 @@ func resolveRedirect(rawURL string) (string, error) {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	if ck != "" {
+		req.Header.Set("Cookie", ck)
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

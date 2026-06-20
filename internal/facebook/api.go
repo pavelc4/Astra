@@ -39,54 +39,60 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 
 	// 2. Determine if it is a video URL
 	isVideo := false
+	isGroup := false
 	u, err := url.Parse(resolvedURL)
 	if err == nil {
 		path := u.Path
 		if strings.Contains(path, "/videos/") || strings.Contains(path, "/reel/") || strings.Contains(path, "/watch") || u.Query().Get("v") != "" {
 			isVideo = true
 		}
+		if strings.Contains(path, "/groups/") {
+			isGroup = true
+		}
 	}
 
-	// 3. For video URLs, try to download as video
-	if isVideo {
+	// 3. For video URLs or group URLs (which might contain a video), try to download as video
+	if isVideo || isGroup {
 		info, err := fetchVideoViaEmbed(resolvedURL, ck)
 		if err == nil {
 			return info, nil
 		}
 
-		// Fallback to page fetch + extraction/GraphQL if embed fails
-		videoID, errID := extractVideoID(resolvedURL)
-		if errID != nil {
+		if isVideo {
+			// Fallback to page fetch + extraction/GraphQL if embed fails (only for dedicated video URLs)
+			videoID, errID := extractVideoID(resolvedURL)
+			if errID != nil {
+				return nil, err
+			}
+
+			if ck == "" {
+				return nil, fmt.Errorf("FACEBOOK_COOKIES not set — GraphQL API requires authentication")
+			}
+
+			pageHTML, dtsg, errPage := fetchPageAndDTSG(videoID, ck)
+			if errPage != nil {
+				return nil, errPage
+			}
+
+			infoGQL, errGQL := queryGraphQL(videoID, dtsg, ck)
+			if errGQL == nil {
+				return infoGQL, nil
+			}
+
+			fallbackInfo, errExt := extractFromPage(pageHTML, videoID)
+			if errExt == nil {
+				return fallbackInfo, nil
+			}
+
 			return nil, err
 		}
-
-		if ck == "" {
-			return nil, fmt.Errorf("FACEBOOK_COOKIES not set — GraphQL API requires authentication")
-		}
-
-		pageHTML, dtsg, errPage := fetchPageAndDTSG(videoID, ck)
-		if errPage != nil {
-			return nil, errPage
-		}
-
-		infoGQL, errGQL := queryGraphQL(videoID, dtsg, ck)
-		if errGQL == nil {
-			return infoGQL, nil
-		}
-
-		fallbackInfo, errExt := extractFromPage(pageHTML, videoID)
-		if errExt == nil {
-			return fallbackInfo, nil
-		}
-
-		return nil, err
 	}
 
-	// 4. Determine if it is a photo/post URL
+	// 4. Determine if it is a photo/post URL (or group URL fallback)
 	isPhoto := false
 	if err == nil {
 		path := u.Path
-		if strings.Contains(path, "/posts/") || strings.Contains(path, "/photo") || strings.Contains(path, "/permalink") || strings.Contains(resolvedURL, "/story.php") {
+		if strings.Contains(path, "/posts/") || strings.Contains(path, "/photo") || strings.Contains(path, "/permalink") || strings.Contains(resolvedURL, "/story.php") || isGroup {
 			isPhoto = true
 		}
 	}

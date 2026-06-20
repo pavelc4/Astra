@@ -22,6 +22,7 @@ type ThreadsVideo struct {
 
 type ThreadsResult struct {
 	Platform   string         `json:"platform"`
+	Caption    string         `json:"caption,omitempty"`
 	PhotoCount int            `json:"photoCount"`
 	VideoCount int            `json:"videoCount"`
 	Photos     []ThreadsPhoto `json:"photos"`

@@ -16,9 +16,13 @@ func main() {
 	cfg := config.Load()
 
 	slog.SetDefault(slog.New(tint.NewHandler(os.Stdout, &tint.Options{
-		Level:      slog.LevelInfo,
 		TimeFormat: time.StampMilli,
 	})))
+
+	slog.Info("cookies check", 
+		"instagram_loaded", os.Getenv("INSTAGRAM_COOKIES") != "",
+		"facebook_loaded", os.Getenv("FACEBOOK_COOKIES") != "",
+	)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)

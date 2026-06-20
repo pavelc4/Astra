@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pavelc4/astra/internal/facebook"
 	"github.com/pavelc4/astra/internal/instagram"
 )
 
@@ -23,6 +24,9 @@ func Load() Config {
 
 	if c := os.Getenv("INSTAGRAM_COOKIES"); c != "" {
 		instagram.SetCookies(c)
+	}
+	if c := os.Getenv("FACEBOOK_COOKIES"); c != "" {
+		facebook.SetCookies(c)
 	}
 
 	return cfg

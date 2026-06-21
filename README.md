@@ -9,9 +9,17 @@
 
 ---
 
-## About
+## Astra Universal Downloader
 
-Astra is a universal media downloader API backend written in Go. It extracts video, photo, slideshow, and audio content from a wide range of social and sharing platforms through a single unified REST interface.
+Astra is a high-performance, concurrent-safe, and lightweight universal media downloader API backend written in Go. It supports extracting media (videos, photos, slides, and audio) from various major social media and sharing platforms through a single unified REST interface.
+
+---
+
+## API Documentation (Swagger / OpenAPI)
+
+An OpenAPI 3.0 specification file is provided at [openapi.yaml](file:///home/sineva/prjkt/go/astra/openapi.yaml). You can:
+1. Import [openapi.yaml](file:///home/sineva/prjkt/go/astra/openapi.yaml) directly into tools like **Postman**, **Insomnia**, or **Swagger Editor** to interactively test all endpoints.
+2. Serve it locally using a Swagger UI docker container or ReDoc.
 
 ---
 

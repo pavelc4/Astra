@@ -1,0 +1,478 @@
+openapi: 3.0.0
+info:
+  title: Astra Universal Downloader API
+  description: High-performance, concurrent-safe universal media downloader API backend written in Go.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Get the health status of the Astra API server.
+      tags:
+        - System
+      responses:
+        '200':
+          description: Server is healthy and running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/tiktok/download:
+    get:
+      summary: TikTok Media Downloader
+      description: Extract videos, slideshows/images, or audios from a TikTok video URL.
+      tags:
+        - TikTok
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/tiktok/profile:
+    get:
+      summary: TikTok Profile Crawler
+      description: Retrieve public user profile data from a TikTok profile URL.
+      tags:
+        - TikTok
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Profile details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/tiktok/music:
+    get:
+      summary: TikTok Music Downloader
+      description: Extract audio/song tracks from a TikTok music URL.
+      tags:
+        - TikTok
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Music details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/twitter/download:
+    get:
+      summary: Twitter / X Media Downloader
+      description: Extract videos or images from a Twitter/X post URL.
+      tags:
+        - Twitter / X
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/meta/instagram/download:
+    get:
+      summary: Instagram Media Downloader
+      description: Extract reels, videos, or photos from an Instagram post/reel URL.
+      tags:
+        - Meta / Instagram
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/meta/instagram/profile:
+    get:
+      summary: Instagram Profile Crawler
+      description: Retrieve public user profile data from an Instagram profile URL.
+      tags:
+        - Meta / Instagram
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Profile details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/meta/instagram/stories:
+    get:
+      summary: Instagram Stories Downloader
+      description: Extract active stories from a user's Instagram profile URL.
+      tags:
+        - Meta / Instagram
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Stories details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/meta/facebook/download:
+    get:
+      summary: Facebook Media Downloader
+      description: Extract public videos or photos from a Facebook link (posts, reels, group content).
+      tags:
+        - Meta / Facebook
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/meta/threads/download:
+    get:
+      summary: Threads Media Downloader
+      description: Extract posts, videos, or photos from a Meta Threads URL.
+      tags:
+        - Meta / Threads
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/reddit/download:
+    get:
+      summary: Reddit Media Downloader
+      description: Extract video, single-photo, or image gallery arrays from a Reddit post URL.
+      tags:
+        - Reddit
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/pinterest/download:
+    get:
+      summary: Pinterest Media Downloader
+      description: Extract videos or photos from a Pinterest pin URL.
+      tags:
+        - Pinterest
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/terabox/download:
+    get:
+      summary: TeraBox Downloader
+      description: Extract direct file downloads, multi-file folders, and streaming m3u8 playlist links from a TeraBox sharing URL.
+      tags:
+        - TeraBox
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Files/links list retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/spotify/download:
+    get:
+      summary: Spotify Media Downloader
+      description: Extract tracks or albums metadata and audio links from a Spotify URL.
+      tags:
+        - Spotify
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Track details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/soundcloud/download:
+    get:
+      summary: SoundCloud Downloader
+      description: Extract audio track download links from a SoundCloud track URL.
+      tags:
+        - SoundCloud
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Track details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/capcut/download:
+    get:
+      summary: CapCut Downloader
+      description: Extract template videos and metadata from a CapCut URL.
+      tags:
+        - CapCut
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/linkedin/download:
+    get:
+      summary: LinkedIn Downloader
+      description: Extract videos or public image attachments (Googlebot user-agent crawler fallback) from a LinkedIn post URL.
+      tags:
+        - LinkedIn
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Media details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/youtube/download:
+    get:
+      summary: YouTube Downloader
+      description: Extract direct videos and audios at varying resolutions from a YouTube URL via a hybrid `yt-dlp` wrapper.
+      tags:
+        - YouTube
+      parameters:
+        - $ref: '#/components/parameters/UrlQueryParam'
+      responses:
+        '200':
+          description: Formats lists retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardMediaResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  parameters:
+    UrlQueryParam:
+      name: url
+      in: query
+      description: The full target media/profile URL to parse and download.
+      required: true
+      schema:
+        type: string
+        example: https://1024terabox.com/s/1j-sr2KYLIkwoRju47wFL4Q
+
+  responses:
+    ErrorResponse:
+      description: Request failed due to invalid validation, upstream issues, or rate-limiting.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponsePayload'
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Universal Downloader API is running
+        data:
+          type: object
+          properties:
+            endpoints:
+              type: array
+              items:
+                type: string
+              example:
+                - /health
+                - /api/tiktok/download
+                - /api/terabox/download
+
+    DownloadItem:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Label describing the specific download format, file name, or action (e.g. "Video HD", "Audio", "File.mp4").
+          example: Video 1080p
+        url:
+          type: string
+          description: Direct download URL or stream URL for the media.
+          example: https://iteraplay.tera-api60.workers.dev/download?token=xyz
+        type:
+          type: string
+          description: Media category type.
+          enum: [video, audio, image, slide]
+          example: video
+        quality:
+          type: string
+          description: Resolution or bitrate quality indicator.
+          example: 1080p
+
+    StandardMediaResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Media fetched successfully
+        data:
+          type: object
+          properties:
+            platform:
+              type: string
+              example: terabox
+            title:
+              type: string
+              example: df biyel 20240923 (1).mp4
+            thumbnail:
+              type: string
+              example: https://iteraplay.tera-api60.workers.dev/thumbnail?token=abc
+            downloads:
+              type: array
+              items:
+                $ref: '#/components/schemas/DownloadItem'
+
+    ErrorResponsePayload:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: url parameter is required
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            detail:
+              type: string
+              example: url parameter is required

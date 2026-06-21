@@ -2,6 +2,7 @@ package tt
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/pavelc4/astra/internal/httpclient"
 )
 
 var (
@@ -17,17 +20,43 @@ var (
 	Timeout          time.Duration = time.Second + time.Millisecond*100
 	MaxUserFeedCount int           = 33
 	Debug                          = false
-	requestSync      *sync.Mutex   = &sync.Mutex{}
+
+	rateLimitMu      sync.Mutex
+	lastRequestTime  time.Time
 )
 
-func Raw(method string, query map[string]string) ([]byte, error) {
+func waitRateLimit(ctx context.Context) error {
+	rateLimitMu.Lock()
+	now := time.Now()
+	nextRequestTime := lastRequestTime.Add(Timeout)
+	if now.Before(nextRequestTime) {
+		delay := nextRequestTime.Sub(now)
+		lastRequestTime = nextRequestTime
+		rateLimitMu.Unlock()
+
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
+	lastRequestTime = now
+	rateLimitMu.Unlock()
+	return nil
+}
+
+func Raw(ctx context.Context, method string, query map[string]string) ([]byte, error) {
 	if Timeout != 0 {
-		requestSync.Lock()
-		defer unlock()
+		if err := waitRateLimit(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	url := fmt.Sprintf("%s/%s", URL, method)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +67,7 @@ func Raw(method string, query map[string]string) ([]byte, error) {
 	}
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpclient.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +85,8 @@ func Raw(method string, query map[string]string) ([]byte, error) {
 	return buffer, nil
 }
 
-func RawParsed[T any](method string, query map[string]string) (*T, error) {
-	data, err := Raw(method, query)
+func RawParsed[T any](ctx context.Context, method string, query map[string]string) (*T, error) {
+	data, err := Raw(ctx, method, query)
 	if err != nil {
 		return nil, err
 	}
@@ -108,10 +137,11 @@ type TaskResultResponse struct {
 }
 
 // RawPost makes a POST request to tikwm API (similar to Raw but for POST)
-func RawPost(method string, payload map[string]string) ([]byte, error) {
+func RawPost(ctx context.Context, method string, payload map[string]string) ([]byte, error) {
 	if Timeout != 0 {
-		requestSync.Lock()
-		defer unlock()
+		if err := waitRateLimit(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	apiURL := fmt.Sprintf("https://tikwm.com/api/%s", method)
@@ -120,13 +150,13 @@ func RawPost(method string, payload map[string]string) ([]byte, error) {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpclient.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +175,8 @@ func RawPost(method string, payload map[string]string) ([]byte, error) {
 }
 
 // submitTask submits a video URL to the task API and returns the task ID
-func submitTask(url string) (string, error) {
-	data, err := RawPost("video/task/submit", map[string]string{"url": url})
+func submitTask(ctx context.Context, url string) (string, error) {
+	data, err := RawPost(ctx, "video/task/submit", map[string]string{"url": url})
 	if err != nil {
 		return "", err
 	}
@@ -167,8 +197,8 @@ func submitTask(url string) (string, error) {
 }
 
 // getTaskResult polls for task result and returns the original quality URL
-func getTaskResult(taskId string) (string, int64, error) {
-	data, err := Raw("video/task/result", map[string]string{"task_id": taskId})
+func getTaskResult(ctx context.Context, taskId string) (string, int64, error) {
+	data, err := Raw(ctx, "video/task/result", map[string]string{"task_id": taskId})
 	if err != nil {
 		return "", 0, err
 	}
@@ -194,15 +224,15 @@ func getTaskResult(taskId string) (string, int64, error) {
 }
 
 // GetPostOriginal gets a post with original quality using the task API
-func GetPostOriginal(url string) (*Post, error) {
+func GetPostOriginal(ctx context.Context, url string) (*Post, error) {
 	// First get the regular post info
-	post, err := GetPost(url, true)
+	post, err := GetPost(ctx, url, true)
 	if err != nil {
 		return nil, err
 	}
 
 	// Submit task for original quality
-	taskId, err := submitTask(url)
+	taskId, err := submitTask(ctx, url)
 	if err != nil {
 		// If task submission fails, return the regular post (fallback)
 		if Debug {
@@ -211,11 +241,17 @@ func GetPostOriginal(url string) (*Post, error) {
 		return post, nil
 	}
 
-	// Poll for result (with retries)
+	// Poll for result (with retries and context checking)
 	maxRetries := 10
 	retryDelay := time.Second * 2
 	for i := 0; i < maxRetries; i++ {
-		originalUrl, size, err := getTaskResult(taskId)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		originalUrl, size, err := getTaskResult(ctx, taskId)
 		if err == nil && originalUrl != "" {
 			post.Original = originalUrl
 			post.OriginalSize = size
@@ -224,7 +260,13 @@ func GetPostOriginal(url string) (*Post, error) {
 
 		// If task is still processing, wait and retry
 		if i < maxRetries-1 {
-			time.Sleep(retryDelay)
+			timer := time.NewTimer(retryDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 
@@ -235,33 +277,28 @@ func GetPostOriginal(url string) (*Post, error) {
 }
 
 // GetPost (hd default: true, original: false)
-func GetPost(url string, hd ...bool) (*Post, error) {
+func GetPost(ctx context.Context, url string, hd ...bool) (*Post, error) {
 	query := map[string]string{"url": url}
 	if len(hd) == 0 || hd[0] {
 		query["hd"] = "1"
 	}
-	return RawParsed[Post]("", query)
+	return RawParsed[Post](ctx, "", query)
 }
 
 // GetUserFeedRaw is almost unuseful by itself, check wrappers around it -- GetUserFeed/GetUserFeedAwait.
-func GetUserFeedRaw(uniqueID string, count int, cursor string) (*UserFeed, error) {
+func GetUserFeedRaw(ctx context.Context, uniqueID string, count int, cursor string) (*UserFeed, error) {
 	query := map[string]string{"unique_id": uniqueID, "count": strconv.Itoa(count), "cursor": cursor}
 	if _, err := strconv.ParseInt(uniqueID, 10, 64); err == nil {
 		query = map[string]string{"user_id": uniqueID, "count": strconv.Itoa(count), "cursor": cursor}
 	}
-	return RawParsed[UserFeed]("user/posts", query)
+	return RawParsed[UserFeed](ctx, "user/posts", query)
 }
 
-func GetMusicDetail(url string) (*MusicDetail, error) {
-	return RawParsed[MusicDetail]("music/info", map[string]string{"url": url})
+func GetMusicDetail(ctx context.Context, url string) (*MusicDetail, error) {
+	return RawParsed[MusicDetail](ctx, "music/info", map[string]string{"url": url})
 }
 
-func GetUserDetail(uniqueID string) (*UserDetail, error) {
+func GetUserDetail(ctx context.Context, uniqueID string) (*UserDetail, error) {
 	query := map[string]string{"unique_id": uniqueID}
-	return RawParsed[UserDetail]("user/info", query)
-}
-
-func unlock() {
-	time.Sleep(Timeout)
-	requestSync.Unlock()
+	return RawParsed[UserDetail](ctx, "user/info", query)
 }

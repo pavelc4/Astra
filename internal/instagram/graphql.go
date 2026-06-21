@@ -1,13 +1,14 @@
 package instagram
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 )
 
-func (c *IGClient) FetchProfile(username string) (*UserProfile, error) {
+func (c *IGClient) FetchProfile(ctx context.Context, username string) (*UserProfile, error) {
 	url := fmt.Sprintf("%s/users/%s/usernameinfo/", apiURL, username)
-	data, err := c.getJSON(url)
+	data, err := c.getJSON(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -52,19 +53,19 @@ func (c *IGClient) FetchProfile(username string) (*UserProfile, error) {
 	}, nil
 }
 
-func (c *IGClient) FetchMedia(longURL string) (*MediaInfo, error) {
+func (c *IGClient) FetchMedia(ctx context.Context, longURL string) (*MediaInfo, error) {
 	shortcode := extractShortcode(longURL)
 	if shortcode == "" {
 		return nil, fmt.Errorf("could not extract shortcode from URL")
 	}
 
-	mediaID, err := extractMediaID(shortcode)
+	mediaID, err := extractMediaID(ctx, shortcode)
 	if err != nil {
 		return nil, err
 	}
 
 	url := fmt.Sprintf("%s/media/%s/info/", apiURL, mediaID)
-	data, err := c.getJSON(url)
+	data, err := c.getJSON(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +83,9 @@ func (c *IGClient) FetchMedia(longURL string) (*MediaInfo, error) {
 }
 
 // getUserPK fetches the numeric user ID for a given Instagram username.
-func (c *IGClient) getUserPK(username string) (string, error) {
+func (c *IGClient) getUserPK(ctx context.Context, username string) (string, error) {
 	url := fmt.Sprintf("%s/users/%s/usernameinfo/", apiURL, username)
-	data, err := c.getJSON(url)
+	data, err := c.getJSON(ctx, url)
 	if err != nil {
 		return "", err
 	}
@@ -103,14 +104,14 @@ func (c *IGClient) getUserPK(username string) (string, error) {
 	return resp.User.Pk, nil
 }
 
-func (c *IGClient) FetchStories(username string) (*StoriesResult, error) {
-	pk, err := c.getUserPK(username)
+func (c *IGClient) FetchStories(ctx context.Context, username string) (*StoriesResult, error) {
+	pk, err := c.getUserPK(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("get user id: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/feed/user/%s/reel_media/", apiURL, pk)
-	data, err := c.getJSON(url)
+	data, err := c.getJSON(ctx, url)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -26,13 +27,13 @@ var (
 	}
 )
 
-func FetchMedia(targetURL string) (*MediaInfo, error) {
+func FetchMedia(ctx context.Context, targetURL string) (*MediaInfo, error) {
 	cookiesMu.RLock()
 	ck := cookies
 	cookiesMu.RUnlock()
 
 	// 1. Resolve redirect of share/watch URL
-	resolvedURL, err := resolveRedirect(targetURL, ck)
+	resolvedURL, err := resolveRedirect(ctx, targetURL, ck)
 	if err != nil {
 		return nil, err
 	}
@@ -58,14 +59,14 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 
 	// 3. For video URLs or group URLs (which might contain a video), try to download as video
 	if isVideo || isGroup {
-		info, err := fetchVideoViaEmbed(resolvedURL, ck)
+		info, err := fetchVideoViaEmbed(ctx, resolvedURL, ck)
 		if err == nil {
 			return info, nil
 		}
 
 		if isVideo {
 			// Fallback to page fetch + extraction/GraphQL if embed fails (only for dedicated video URLs)
-			videoID, errID := extractVideoID(resolvedURL)
+			videoID, errID := extractVideoID(ctx, resolvedURL)
 			if errID != nil {
 				return nil, err
 			}
@@ -74,12 +75,12 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 				return nil, fmt.Errorf("FACEBOOK_COOKIES not set — GraphQL API requires authentication")
 			}
 
-			pageHTML, dtsg, errPage := fetchPageAndDTSG(videoID, ck)
+			pageHTML, dtsg, errPage := fetchPageAndDTSG(ctx, videoID, ck)
 			if errPage != nil {
 				return nil, errPage
 			}
 
-			infoGQL, errGQL := queryGraphQL(videoID, dtsg, ck)
+			infoGQL, errGQL := queryGraphQL(ctx, videoID, dtsg, ck)
 			if errGQL == nil {
 				return infoGQL, nil
 			}
@@ -107,11 +108,11 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 	}
 
 	// 5. For photo/post URLs, fetch as crawler
-	info, err := fetchPhotosViaCrawler(resolvedURL, "")
+	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, "")
 	if err != nil || len(info.Photos) == 0 {
 		// Retry with cookies if we have them
 		if ck != "" {
-			info, err = fetchPhotosViaCrawler(resolvedURL, ck)
+			info, err = fetchPhotosViaCrawler(ctx, resolvedURL, ck)
 		}
 	}
 
@@ -126,7 +127,7 @@ func FetchMedia(targetURL string) (*MediaInfo, error) {
 	return info, nil
 }
 
-func resolveRedirect(rawURL, ck string) (string, error) {
+func resolveRedirect(ctx context.Context, rawURL, ck string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
@@ -137,7 +138,7 @@ func resolveRedirect(rawURL, ck string) (string, error) {
 		return rawURL, nil
 	}
 
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -173,8 +174,8 @@ func resolveRedirect(rawURL, ck string) (string, error) {
 	return rawURL, nil
 }
 
-func fetchPhotosViaCrawler(targetURL, ck string) (*MediaInfo, error) {
-	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -256,7 +257,7 @@ func fetchPhotosViaCrawler(targetURL, ck string) (*MediaInfo, error) {
 	return info, nil
 }
 
-func extractVideoID(rawURL string) (string, error) {
+func extractVideoID(ctx context.Context, rawURL string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
@@ -265,11 +266,11 @@ func extractVideoID(rawURL string) (string, error) {
 	path := u.Path
 
 	if strings.HasPrefix(u.Host, "fb.watch") || strings.HasPrefix(u.Host, "www.fb.watch") || strings.Contains(path, "/fb.watch/") {
-		return resolveShortURL(rawURL, u.Host)
+		return resolveShortURL(ctx, rawURL, u.Host)
 	}
 
 	if strings.Contains(path, "/share/") {
-		return resolveShortURL(rawURL, u.Host)
+		return resolveShortURL(ctx, rawURL, u.Host)
 	}
 
 	target := path
@@ -286,8 +287,8 @@ func extractVideoID(rawURL string) (string, error) {
 	return "", fmt.Errorf("could not extract video ID from URL: %s", rawURL)
 }
 
-func resolveShortURL(rawURL, host string) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+func resolveShortURL(ctx context.Context, rawURL, host string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -301,7 +302,7 @@ func resolveShortURL(rawURL, host string) (string, error) {
 
 	finalURL := resp.Request.URL.String()
 	if finalURL != rawURL {
-		return extractVideoID(finalURL)
+		return extractVideoID(ctx, finalURL)
 	}
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
@@ -309,21 +310,21 @@ func resolveShortURL(rawURL, host string) (string, error) {
 
 	canonical := regexp.MustCompile(`<link[^>]+rel="canonical"[^>]+href="([^"]+)"`).FindStringSubmatch(html)
 	if len(canonical) > 1 {
-		return extractVideoID(canonical[1])
+		return extractVideoID(ctx, canonical[1])
 	}
 
 	ogURL := regexp.MustCompile(`<meta[^>]+property="og:url"[^>]+content="([^"]+)"`).FindStringSubmatch(html)
 	if len(ogURL) > 1 {
-		return extractVideoID(ogURL[1])
+		return extractVideoID(ctx, ogURL[1])
 	}
 
 	return "", fmt.Errorf("could not resolve short URL: %s", rawURL)
 }
 
-func fetchPageAndDTSG(videoID, ck string) (string, string, error) {
+func fetchPageAndDTSG(ctx context.Context, videoID, ck string) (string, string, error) {
 	pageURL := fmt.Sprintf("https://www.facebook.com/watch/?v=%s", videoID)
 
-	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("create page request: %w", err)
 	}
@@ -352,7 +353,7 @@ func fetchPageAndDTSG(videoID, ck string) (string, string, error) {
 	return html, dtsg, nil
 }
 
-func queryGraphQL(videoID, dtsg, ck string) (*MediaInfo, error) {
+func queryGraphQL(ctx context.Context, videoID, dtsg, ck string) (*MediaInfo, error) {
 	query := `query($id: ID!) { node(id: $id) { __typename ... on Video { playable_url playable_url_quality_hd browser_native_hd_url browser_native_sd_url title preferred_thumbnail { image { uri } } playable_duration_in_ms } } }`
 
 	variables := map[string]string{"id": videoID}
@@ -367,7 +368,7 @@ func queryGraphQL(videoID, dtsg, ck string) (*MediaInfo, error) {
 		form.Set("fb_dtsg", dtsg)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, graphQLURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, graphQLURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("create graphql request: %w", err)
 	}
@@ -477,9 +478,9 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-func fetchVideoViaEmbed(targetURL, ck string) (*MediaInfo, error) {
+func fetchVideoViaEmbed(ctx context.Context, targetURL, ck string) (*MediaInfo, error) {
 	embedURL := fmt.Sprintf("https://www.facebook.com/plugins/video.php?href=%s", url.QueryEscape(targetURL))
-	req, err := http.NewRequest(http.MethodGet, embedURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, embedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -526,9 +527,9 @@ func fetchVideoViaEmbed(targetURL, ck string) (*MediaInfo, error) {
 	}
 
 	// Try fetching title/caption from watch/reel page as crawler
-	crawlerInfo, err := fetchPhotosViaCrawler(targetURL, "")
+	crawlerInfo, err := fetchPhotosViaCrawler(ctx, targetURL, "")
 	if err != nil && ck != "" {
-		crawlerInfo, err = fetchPhotosViaCrawler(targetURL, ck)
+		crawlerInfo, err = fetchPhotosViaCrawler(ctx, targetURL, ck)
 	}
 	if err == nil {
 		info.Caption = crawlerInfo.Caption

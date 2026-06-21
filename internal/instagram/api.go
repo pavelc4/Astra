@@ -1,36 +1,51 @@
 package instagram
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"sync"
+)
 
-var cookies string
+var (
+	cookies   string
+	cookiesMu sync.RWMutex
+)
 
 func SetCookies(c string) {
+	cookiesMu.Lock()
+	defer cookiesMu.Unlock()
 	cookies = c
 }
 
-func FetchProfile(username string) (*UserProfile, error) {
-	client := NewIGClient(cookies)
-	return client.FetchProfile(username)
+func GetCookies() string {
+	cookiesMu.RLock()
+	defer cookiesMu.RUnlock()
+	return cookies
 }
 
-func FetchMedia(targetURL string) (*MediaInfo, error) {
-	client := NewIGClient(cookies)
-	return client.FetchMedia(targetURL)
+func FetchProfile(ctx context.Context, username string) (*UserProfile, error) {
+	client := NewIGClient(GetCookies())
+	return client.FetchProfile(ctx, username)
 }
 
-func FetchStories(username string) (*StoriesResult, error) {
-	client := NewIGClient(cookies)
-	return client.FetchStories(username)
+func FetchMedia(ctx context.Context, targetURL string) (*MediaInfo, error) {
+	client := NewIGClient(GetCookies())
+	return client.FetchMedia(ctx, targetURL)
 }
 
-func FetchProfileFromMedia(longURL string) (*UserProfile, error) {
+func FetchStories(ctx context.Context, username string) (*StoriesResult, error) {
+	client := NewIGClient(GetCookies())
+	return client.FetchStories(ctx, username)
+}
+
+func FetchProfileFromMedia(ctx context.Context, longURL string) (*UserProfile, error) {
 	shortcode := extractShortcode(longURL)
 	if shortcode == "" {
 		return nil, fmt.Errorf("could not extract shortcode from URL")
 	}
 
-	client := NewIGClient(cookies)
-	info, err := client.FetchMedia(longURL)
+	client := NewIGClient(GetCookies())
+	info, err := client.FetchMedia(ctx, longURL)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +54,5 @@ func FetchProfileFromMedia(longURL string) (*UserProfile, error) {
 		return nil, fmt.Errorf("could not find owner")
 	}
 
-	return client.FetchProfile(info.OwnerUser)
+	return client.FetchProfile(ctx, info.OwnerUser)
 }
-

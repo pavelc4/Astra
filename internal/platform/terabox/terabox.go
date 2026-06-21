@@ -1,6 +1,7 @@
 package terabox
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,8 +23,8 @@ type Result struct {
 
 var nonceRe = regexp.MustCompile(`"nonce":"(.*?)"`)
 
-func FetchData(teraboxURL string) (*Result, error) {
-	nonce, err := fetchNonce()
+func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
+	nonce, err := fetchNonce(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func FetchData(teraboxURL string) (*Result, error) {
 		"nonce":  {nonce},
 	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://teradownloaderz.com/wp-admin/admin-ajax.php", strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://teradownloaderz.com/wp-admin/admin-ajax.php", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -61,8 +62,12 @@ func FetchData(teraboxURL string) (*Result, error) {
 	return &Result{Platform: "terabox", Raw: json.RawMessage(body)}, nil
 }
 
-func fetchNonce() (string, error) {
-	resp, err := httpclient.Client.Get("https://teradownloaderz.com")
+func fetchNonce(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://teradownloaderz.com", nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	resp, err := httpclient.Client.Do(req)
 	if err != nil {
 		return "", errors.NewUpstream(fmt.Sprintf("Terabox nonce fetch failed: %s", err.Error()))
 	}

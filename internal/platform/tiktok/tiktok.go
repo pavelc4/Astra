@@ -1,11 +1,12 @@
 package tiktok
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 
-	"github.com/pavelc4/astra/internal/tiktok"
+	tt "github.com/pavelc4/astra/internal/tiktok"
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/types"
@@ -40,8 +41,8 @@ type UserResult struct {
 	Videos      int     `json:"videos"`
 }
 
-func FetchData(videoURL string) (*Result, error) {
-	post, err := tt.GetPostOriginal(videoURL)
+func FetchData(ctx context.Context, videoURL string) (*Result, error) {
+	post, err := tt.GetPostOriginal(ctx, videoURL)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok fetch failed: %s", err.Error()))
 	}
@@ -101,13 +102,13 @@ func FetchData(videoURL string) (*Result, error) {
 	return result, nil
 }
 
-func FetchUser(profileURL string) (*UserResult, error) {
+func FetchUser(ctx context.Context, profileURL string) (*UserResult, error) {
 	username := extractUsername(profileURL)
 	if username == "" {
 		return nil, errors.NewInvalidURL("could not extract username from URL")
 	}
 
-	detail, err := tt.GetUserDetail(username)
+	detail, err := tt.GetUserDetail(ctx, username)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok user fetch failed: %s", err.Error()))
 	}
@@ -142,8 +143,8 @@ type MusicResult struct {
 	Videos   int    `json:"videos"`
 }
 
-func FetchMusic(musicURL string) (*MusicResult, error) {
-	detail, err := tt.GetMusicDetail(musicURL)
+func FetchMusic(ctx context.Context, musicURL string) (*MusicResult, error) {
+	detail, err := tt.GetMusicDetail(ctx, musicURL)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok music fetch failed: %s", err.Error()))
 	}

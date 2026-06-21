@@ -1,11 +1,14 @@
 package instagram
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pavelc4/astra/internal/httpclient"
 )
 
 const (
@@ -15,6 +18,14 @@ const (
 	appID    = "936619743392459"
 )
 
+var igHTTPClient = &http.Client{
+	Timeout:   15 * time.Second,
+	Transport: httpclient.Client.Transport,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
 type IGClient struct {
 	http    *http.Client
 	cookies string
@@ -22,18 +33,13 @@ type IGClient struct {
 
 func NewIGClient(cookies string) *IGClient {
 	return &IGClient{
-		http: &http.Client{
-			Timeout: 15 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+		http:    igHTTPClient,
 		cookies: cookies,
 	}
 }
 
-func (c *IGClient) req(method, url string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, url, body)
+func (c *IGClient) req(ctx context.Context, method, url string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -66,8 +72,8 @@ func (c *IGClient) req(method, url string, body io.Reader) (*http.Response, erro
 	return resp, nil
 }
 
-func (c *IGClient) getJSON(url string) ([]byte, error) {
-	resp, err := c.req(http.MethodGet, url, nil)
+func (c *IGClient) getJSON(ctx context.Context, url string) ([]byte, error) {
+	resp, err := c.req(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -91,17 +97,16 @@ func (c *IGClient) HasCookies() bool {
 
 // extractMediaID parses the media ID from an Instagram page's meta tags
 // (<meta property="al:ios:url" content="instagram://media?id=XXX">).
-func extractMediaID(shortcode string) (string, error) {
+func extractMediaID(ctx context.Context, shortcode string) (string, error) {
 	pageURL := fmt.Sprintf("%s/p/%s/", baseURL, shortcode)
 
-	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create page request: %w", err)
 	}
 	req.Header.Set("User-Agent", mobileUA)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := igHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch page: %w", err)
 	}
@@ -136,10 +141,10 @@ type mobileMediaItem struct {
 	Code          string `json:"code"`
 	MediaType     int    `json:"media_type"` // 1=photo, 2=video, 8=carousel
 	VideoVersions []struct {
-		Type int    `json:"type"`
-		URL  string `json:"url"`
-		Width  int `json:"width"`
-		Height int `json:"height"`
+		Type   int    `json:"type"`
+		URL    string `json:"url"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
 	} `json:"video_versions"`
 	ImageVersions2 *struct {
 		Candidates []struct {

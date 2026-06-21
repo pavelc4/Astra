@@ -1,6 +1,8 @@
 package meta
 
 import (
+	"context"
+
 	"github.com/pavelc4/astra/internal/facebook"
 	"github.com/pavelc4/astra/internal/instagram"
 )
@@ -15,8 +17,8 @@ type FacebookResult struct {
 	Raw       []instagram.MediaItem `json:"raw,omitempty"`
 }
 
-func FetchFacebookData(url string) (*FacebookResult, error) {
-	info, err := facebook.FetchMedia(url)
+func FetchFacebookData(ctx context.Context, url string) (*FacebookResult, error) {
+	info, err := facebook.FetchMedia(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -25,6 +27,9 @@ func FetchFacebookData(url string) (*FacebookResult, error) {
 		Platform: "facebook",
 		Caption:  info.Caption,
 		Duration: info.Duration,
+		Videos:   make([]instagram.MediaItem, 0, len(info.Videos)),
+		Photos:   make([]instagram.MediaItem, 0, len(info.Photos)),
+		Raw:      make([]instagram.MediaItem, 0, len(info.Videos)+len(info.Photos)),
 	}
 
 	for _, v := range info.Videos {

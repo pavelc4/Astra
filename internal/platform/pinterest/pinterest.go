@@ -1,6 +1,7 @@
 package pinterest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,12 +29,13 @@ type Result struct {
 
 // pinterestClient is a custom http.Client configured to follow redirects for pin.it URLs.
 var pinterestClient = &http.Client{
-	Timeout: 10 * time.Second,
+	Timeout:   10 * time.Second,
+	Transport: httpclient.Client.Transport,
 }
 
-func FetchData(targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	// 1. Resolve final URL to extract Pin ID
-	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -69,7 +71,7 @@ func FetchData(targetURL string) (*Result, error) {
 	params.Set("data", string(dataParam))
 	fullAPIURL := apiURL + "?" + params.Encode()
 
-	apiReq, err := http.NewRequest(http.MethodGet, fullAPIURL, nil)
+	apiReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fullAPIURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create API request: %w", err)
 	}
@@ -142,7 +144,7 @@ func FetchData(targetURL string) (*Result, error) {
 
 	// parseMasterM3U8 fetches the master m3u8 playlist and returns (suffix→label) pairs ordered by resolution descending.
 	parseMasterM3U8 := func(m3u8URL string) []struct{ Suffix, Label string } {
-		req, err := http.NewRequest(http.MethodGet, m3u8URL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, m3u8URL, nil)
 		if err != nil {
 			return nil
 		}

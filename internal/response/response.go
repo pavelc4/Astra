@@ -2,14 +2,16 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 
-	"github.com/pavelc4/astra/internal/errors"
+	apperrors "github.com/pavelc4/astra/internal/errors"
 )
 
 type ErrorDetail struct {
-	Code   errors.ErrorCode `json:"code"`
-	Detail string           `json:"detail"`
+	Code   apperrors.ErrorCode `json:"code"`
+	Detail string              `json:"detail"`
 }
 
 type APIResponse struct {
@@ -29,7 +31,7 @@ func OK(w http.ResponseWriter, data any, msg string) {
 	})
 }
 
-func Fail(w http.ResponseWriter, status int, msg string, code errors.ErrorCode, detail string) {
+func Fail(w http.ResponseWriter, status int, msg string, code apperrors.ErrorCode, detail string) {
 	writeJSON(w, status, APIResponse{
 		Status:  status,
 		Success: false,
@@ -39,15 +41,18 @@ func Fail(w http.ResponseWriter, status int, msg string, code errors.ErrorCode, 
 }
 
 func HandleError(w http.ResponseWriter, err error) {
-	if appErr, ok := err.(*errors.AppError); ok {
+	var appErr *apperrors.AppError
+	if errors.As(err, &appErr) {
 		Fail(w, appErr.Status, appErr.Message, appErr.Code, appErr.Message)
 		return
 	}
-	Fail(w, http.StatusInternalServerError, "Internal server error", errors.CodeInternalError, err.Error())
+	Fail(w, http.StatusInternalServerError, "Internal server error", apperrors.CodeInternalError, err.Error())
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("Failed to encode JSON response", "error", err)
+	}
 }

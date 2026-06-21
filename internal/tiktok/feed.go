@@ -1,6 +1,7 @@
 package tt
 
 import (
+	"context"
 	"log"
 	"time"
 )
@@ -59,8 +60,8 @@ func (opt *FeedOpt) Defaults() *FeedOpt {
 	return opt
 }
 
-func GetUserFeedAwait(uniqueID string, opts ...FeedOpt) ([]Post, error) {
-	postChan, _, err := GetUserFeed(uniqueID, opts...)
+func GetUserFeedAwait(ctx context.Context, uniqueID string, opts ...FeedOpt) ([]Post, error) {
+	postChan, _, err := GetUserFeed(ctx, uniqueID, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +74,14 @@ func GetUserFeedAwait(uniqueID string, opts ...FeedOpt) ([]Post, error) {
 
 // GetUserFeed to a channel, getting HD versions of files could take a while.
 // If you are okay with waiting for minutes ((1-2 secs) * len_of_videos), consider GetUserFeedAwait
-func GetUserFeed(uniqueID string, opts ...FeedOpt) (chan Post, int, error) {
+func GetUserFeed(ctx context.Context, uniqueID string, opts ...FeedOpt) (chan Post, int, error) {
 	var opt *FeedOpt = nil
 	if len(opts) != 0 {
 		opt = &opts[0]
 	}
 	opt = opt.Defaults()
 
-	posts, err := userFeedUntilInternal(uniqueID, "0", opt)
+	posts, err := userFeedUntilInternal(ctx, uniqueID, "0", opt)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -98,17 +99,35 @@ func GetUserFeed(uniqueID string, opts ...FeedOpt) (chan Post, int, error) {
 
 		defer close(opt.ReturnChan)
 		for _, post := range posts {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			if opt.SD {
-				opt.ReturnChan <- post
+				select {
+				case <-ctx.Done():
+					return
+				case opt.ReturnChan <- post:
+				}
 				continue
 			}
 
-			vidHD, err := GetPost(post.VideoId, true)
+			vidHD, err := GetPost(ctx, post.VideoId, true)
 			if err != nil {
 				opt.OnError(err)
-				opt.ReturnChan <- post
+				select {
+				case <-ctx.Done():
+					return
+				case opt.ReturnChan <- post:
+				}
 			} else {
-				opt.ReturnChan <- *vidHD
+				select {
+				case <-ctx.Done():
+					return
+				case opt.ReturnChan <- *vidHD:
+				}
 			}
 		}
 	}()
@@ -116,8 +135,8 @@ func GetUserFeed(uniqueID string, opts ...FeedOpt) (chan Post, int, error) {
 	return opt.ReturnChan, len(posts), err
 }
 
-func userFeedUntilInternal(uniqueID string, cursor string, opt *FeedOpt) ([]Post, error) {
-	feed, err := GetUserFeedRaw(uniqueID, MaxUserFeedCount, cursor)
+func userFeedUntilInternal(ctx context.Context, uniqueID string, cursor string, opt *FeedOpt) ([]Post, error) {
+	feed, err := GetUserFeedRaw(ctx, uniqueID, MaxUserFeedCount, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +158,7 @@ func userFeedUntilInternal(uniqueID string, cursor string, opt *FeedOpt) ([]Post
 		return ret, nil
 	}
 
-	deeperRet, err := userFeedUntilInternal(uniqueID, feed.Cursor, opt)
+	deeperRet, err := userFeedUntilInternal(ctx, uniqueID, feed.Cursor, opt)
 	if err != nil {
 		return ret, err
 	}

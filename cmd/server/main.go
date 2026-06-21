@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,10 +36,40 @@ func main() {
 	registerRoutes(r)
 
 	addr := cfg.Host + ":" + cfg.Port
-	slog.Info("server starting", "port", cfg.Port)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		slog.Error("server stopped", "error", err)
+
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	stopSig := make(chan os.Signal, 1)
+	signal.Notify(stopSig, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("server starting", "host", cfg.Host, "port", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server stopped unexpectedly", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	sig := <-stopSig
+	slog.Info("server stopping gracefully", "signal", sig.String())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		slog.Error("server graceful shutdown failed", "error", err)
+		if err := server.Close(); err != nil {
+			slog.Error("forced server close failed", "error", err)
+		}
+	}
+
+	slog.Info("server exited cleanly")
 }
 
 func requestLogger(next http.Handler) http.Handler {
@@ -43,11 +77,11 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		slog.Info("request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", ww.Status(),
-			"duration", time.Since(start).String(),
+		slog.LogAttrs(r.Context(), slog.LevelInfo, "request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", ww.Status()),
+			slog.Duration("duration", time.Since(start)),
 		)
 	})
 }

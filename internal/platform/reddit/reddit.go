@@ -1,6 +1,7 @@
 package reddit
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ type Result struct {
 var reVReddit = regexp.MustCompile(`https://v\.redd\.it/[^\s"<&]+`)
 var reImgRedd = regexp.MustCompile(`https://i\.redd\.it/[^\s"<]+`)
 
-func FetchData(targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	// Normalize URL: strip query params and trailing slash for cleaner rapidsave request
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -41,7 +42,7 @@ func FetchData(targetURL string) (*Result, error) {
 
 	rapidsaveURL := fmt.Sprintf("https://rapidsave.com/info?url=%s", url.QueryEscape(cleanURL))
 
-	req, err := http.NewRequest(http.MethodGet, rapidsaveURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rapidsaveURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -75,14 +76,45 @@ func FetchData(targetURL string) (*Result, error) {
 	var downloads []DownloadItem
 	var thumbnail string
 
-	// --- Image post ---
-	// Selector: a.downloadbutton (exact class, no trailing space) with i.redd.it href
 	doc.Find("a.downloadbutton").Each(func(_ int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
 		if !exists {
 			return
 		}
-		if reImgRedd.MatchString(href) {
+
+		// Parse the video_url from the href query string (if present)
+		u, err := url.Parse(href)
+		videoURL := ""
+		if err == nil {
+			videoURL = u.Query().Get("video_url")
+		}
+		if videoURL == "" {
+			m := reVReddit.FindString(href)
+			if m != "" {
+				videoURL = m
+			}
+		}
+
+		if videoURL != "" {
+			format := "mp4"
+			quality := "hd"
+			if strings.Contains(strings.ToLower(videoURL), "cmaf_720") || strings.Contains(strings.ToLower(videoURL), "720") {
+				quality = "720p"
+			} else if strings.Contains(strings.ToLower(videoURL), "1080") {
+				quality = "1080p"
+			}
+			downloads = append(downloads, DownloadItem{
+				Quality: quality,
+				Format:  format,
+				URL:     href,
+			})
+			if thumbnail == "" {
+				thumbMatch := doc.Find("img.img-fluid").First()
+				if src, ok := thumbMatch.Attr("src"); ok && src != "" {
+					thumbnail = src
+				}
+			}
+		} else if reImgRedd.MatchString(href) {
 			if thumbnail == "" {
 				thumbnail = href
 			}
@@ -95,55 +127,12 @@ func FetchData(targetURL string) (*Result, error) {
 				Format:  ext,
 				URL:     href,
 			})
-		}
-	})
-
-	// --- Video post ---
-	// Selector: a[class="downloadbutton "] (note trailing space) contains the sd.rapidsave.com proxy link
-	// with video_url parameter pointing to v.redd.it
-	doc.Find("a").Each(func(_ int, s *goquery.Selection) {
-		cls, _ := s.Attr("class")
-		if cls != "downloadbutton " {
-			return
-		}
-		href, exists := s.Attr("href")
-		if !exists {
-			return
-		}
-		// Parse the video_url from the href query string
-		u, err := url.Parse(href)
-		if err != nil {
-			return
-		}
-		videoURL := u.Query().Get("video_url")
-		if videoURL == "" {
-			// Try to find v.redd.it directly in href
-			m := reVReddit.FindString(href)
-			if m != "" {
-				videoURL = m
-			}
-		}
-		if videoURL != "" {
-			format := "mp4"
-			quality := "hd"
-			if strings.Contains(strings.ToLower(videoURL), "CMAF_720") || strings.Contains(strings.ToLower(videoURL), "720") {
-				quality = "720p"
-			} else if strings.Contains(strings.ToLower(videoURL), "1080") {
-				quality = "1080p"
-			}
-			// Use the rapidsave proxy URL as it merges audio+video automatically
+		} else if strings.Contains(href, "reddit.com/gallery/") {
 			downloads = append(downloads, DownloadItem{
-				Quality: quality,
-				Format:  format,
-				URL:     href, // proxy URL that downloads merged mp4
+				Quality: "gallery",
+				Format:  "link",
+				URL:     href,
 			})
-			// Set thumbnail to the preview image if found
-			if thumbnail == "" {
-				thumbMatch := doc.Find("img.img-fluid").First()
-				if src, ok := thumbMatch.Attr("src"); ok && src != "" {
-					thumbnail = src
-				}
-			}
 		}
 	})
 

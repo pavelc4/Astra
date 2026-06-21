@@ -1,6 +1,8 @@
 package meta
 
 import (
+	"context"
+
 	"github.com/pavelc4/astra/internal/instagram"
 )
 
@@ -14,16 +16,16 @@ type InstagramResult struct {
 	Raw         []instagram.MediaItem `json:"raw,omitempty"`
 }
 
-func FetchInstagramProfile(rawURL string) (*instagram.UserProfile, error) {
+func FetchInstagramProfile(ctx context.Context, rawURL string) (*instagram.UserProfile, error) {
 	if username := instagram.ExtractUsername(rawURL); username != "" {
-		return instagram.FetchProfile(username)
+		return instagram.FetchProfile(ctx, username)
 	}
 
-	return instagram.FetchProfileFromMedia(rawURL)
+	return instagram.FetchProfileFromMedia(ctx, rawURL)
 }
 
-func FetchInstagramData(url string) (*InstagramResult, error) {
-	info, err := instagram.FetchMedia(url)
+func FetchInstagramData(ctx context.Context, url string) (*InstagramResult, error) {
+	info, err := instagram.FetchMedia(ctx, url)
 	if err != nil {
 		return nil, err
 	}

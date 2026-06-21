@@ -1,6 +1,7 @@
 package twitter
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,10 +28,10 @@ type Result struct {
 	Downloads []types.DownloadItem `json:"downloads"`
 }
 
-func FetchData(tweetURL string) (*Result, error) {
+func FetchData(ctx context.Context, tweetURL string) (*Result, error) {
 	form := url.Values{"q": {tweetURL}, "lang": {"en"}, "cftoken": {""}}
 
-	req, err := http.NewRequest(http.MethodPost, "https://savetwitter.net/api/ajaxSearch", strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://savetwitter.net/api/ajaxSearch", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

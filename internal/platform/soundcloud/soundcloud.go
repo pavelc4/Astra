@@ -1,6 +1,7 @@
 package soundcloud
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,12 +18,12 @@ type Result struct {
 	Raw      json.RawMessage `json:"raw"`
 }
 
-func FetchData(targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	token := "8b6e170975d92939bb67d8db567f82e43fa2da91e00a84f258af77c1186c5e8a"
 	hash := "aHR0cHM6Ly9zb3VuZGNsb3VkLmNvbS9zb21icnNvbmdzL3VuZHJlc3NlZA%3D%3D1043YWlvLWRs"
 	payload := fmt.Sprintf("url=%s&token=%s&hash=%s", url.QueryEscape(targetURL), token, hash)
 
-	req, err := http.NewRequest(http.MethodPost, "https://urlmp4.com/wp-json/aio-dl/video-data/", strings.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://urlmp4.com/wp-json/aio-dl/video-data/", strings.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

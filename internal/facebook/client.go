@@ -4,11 +4,14 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/pavelc4/astra/internal/httpclient"
 )
 
 var (
 	httpClient = &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: httpclient.Client.Transport,
 	}
 
 	cookies   string

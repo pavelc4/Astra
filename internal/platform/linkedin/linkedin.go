@@ -2,6 +2,7 @@ package linkedin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,10 +17,10 @@ type Result struct {
 	Raw      json.RawMessage `json:"raw"`
 }
 
-func FetchData(targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	payload, _ := json.Marshal(map[string]string{"url": targetURL})
 
-	req, err := http.NewRequest(http.MethodPost, "https://saywhat.ai/api/fetch-linkedin-page/", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://saywhat.ai/api/fetch-linkedin-page/", bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

@@ -2,6 +2,7 @@ package meta
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"html"
@@ -16,12 +17,12 @@ import (
 	"github.com/pavelc4/astra/internal/httpclient"
 )
 
-func FetchThreadsData(postURL string) (*ThreadsResult, error) {
+func FetchThreadsData(ctx context.Context, postURL string) (*ThreadsResult, error) {
 	var caption string
 	var fallbackImage string
 
 	// 1. Fetch the Threads post page directly with a crawler User-Agent to extract metadata (caption & primary image)
-	reqMeta, err := http.NewRequest(http.MethodGet, postURL, nil)
+	reqMeta, err := http.NewRequestWithContext(ctx, http.MethodGet, postURL, nil)
 	if err == nil {
 		reqMeta.Header.Set("User-Agent", "facebookexternalhit/1.1")
 		respMeta, errMeta := httpclient.Client.Do(reqMeta)
@@ -53,7 +54,7 @@ func FetchThreadsData(postURL string) (*ThreadsResult, error) {
 	var videos []ThreadsVideo
 
 	// 2. Fetch SSSThreads homepage to get the current AJAX URL and Nonce
-	reqHome, err := http.NewRequest(http.MethodGet, "https://sssthreads.cc/", nil)
+	reqHome, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://sssthreads.cc/", nil)
 	if err == nil {
 		reqHome.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 		respHome, errHome := httpclient.Client.Do(reqHome)
@@ -75,7 +76,7 @@ func FetchThreadsData(postURL string) (*ThreadsResult, error) {
 					form.Set("nonce", tvdConfig.Nonce)
 					form.Set("url", postURL)
 
-					reqAjax, errAjax := http.NewRequest(http.MethodPost, tvdConfig.AjaxURL, bytes.NewBufferString(form.Encode()))
+					reqAjax, errAjax := http.NewRequestWithContext(ctx, http.MethodPost, tvdConfig.AjaxURL, bytes.NewBufferString(form.Encode()))
 					if errAjax == nil {
 						reqAjax.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 						reqAjax.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")

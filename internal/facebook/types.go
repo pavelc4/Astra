@@ -28,16 +28,16 @@ type graphQLData struct {
 }
 
 type graphQLNode struct {
-	Typename    string              `json:"__typename"`
-	PlayableURL string              `json:"playable_url,omitempty"`
-	PlayableHD  string              `json:"playable_url_quality_hd,omitempty"`
-	BrowserHD   string              `json:"browser_native_hd_url,omitempty"`
-	BrowserSD   string              `json:"browser_native_sd_url,omitempty"`
-	Title       string              `json:"title,omitempty"`
-	Description string              `json:"description,omitempty"`
-	DurationMs  int                 `json:"playable_duration_in_ms,omitempty"`
-	Thumbnail   *graphQLThumbnail   `json:"preferred_thumbnail,omitempty"`
-	ID          string              `json:"id,omitempty"`
+	Typename    string            `json:"__typename"`
+	PlayableURL string            `json:"playable_url,omitempty"`
+	PlayableHD  string            `json:"playable_url_quality_hd,omitempty"`
+	BrowserHD   string            `json:"browser_native_hd_url,omitempty"`
+	BrowserSD   string            `json:"browser_native_sd_url,omitempty"`
+	Title       string            `json:"title,omitempty"`
+	Description string            `json:"description,omitempty"`
+	DurationMs  int               `json:"playable_duration_in_ms,omitempty"`
+	Thumbnail   *graphQLThumbnail `json:"preferred_thumbnail,omitempty"`
+	ID          string            `json:"id,omitempty"`
 }
 
 type graphQLThumbnail struct {

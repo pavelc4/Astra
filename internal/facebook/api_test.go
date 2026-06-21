@@ -12,11 +12,23 @@ func TestCleanFacebookCaption(t *testing.T) {
 			expected: "emang iya ya cosplayer mukanya dempul banget?",
 		},
 		{
+			input:    "ကြည့်ရှုမှု ၁.၂ သန်း ကြိမ် · တုံ့ပြန်မှု ၅.၄ ထောင် ခု | Untung ketahuan\nHati hati buat para lelaki | Bagja Gumilar",
+			expected: "Untung ketahuan\nHati hati buat para lelaki | Bagja Gumilar",
+		},
+		{
 			input:    "🎬 456K views · 22K reactions | The actual caption here",
 			expected: "The actual caption here",
 		},
 		{
+			input:    "456K views · 22K reactions | The actual caption here",
+			expected: "The actual caption here",
+		},
+		{
 			input:    "🎬 Views 1.2M | Title with a | character | inside",
+			expected: "Title with a | character | inside",
+		},
+		{
+			input:    "Views 1.2M | Title with a | character | inside",
 			expected: "Title with a | character | inside",
 		},
 		{
@@ -30,6 +42,10 @@ func TestCleanFacebookCaption(t *testing.T) {
 		{
 			input:    "   🎬 Spaces before emoji | Clean me   ",
 			expected: "Clean me",
+		},
+		{
+			input:    "Spaces before text | Clean me   ",
+			expected: "Spaces before text | Clean me   ", // No stats keyword, so it shouldn't clean. Correct!
 		},
 	}
 

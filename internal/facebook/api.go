@@ -27,7 +27,28 @@ var (
 	}
 )
 
+func cleanFacebookCaption(caption string) string {
+	trimmed := strings.TrimSpace(caption)
+	if strings.HasPrefix(trimmed, "🎬") {
+		if idx := strings.Index(trimmed, "|"); idx != -1 {
+			return strings.TrimSpace(trimmed[idx+1:])
+		}
+	}
+	return caption
+}
+
 func FetchMedia(ctx context.Context, targetURL string) (*MediaInfo, error) {
+	info, err := fetchMediaInternal(ctx, targetURL)
+	if err != nil {
+		return nil, err
+	}
+	if info != nil {
+		info.Caption = cleanFacebookCaption(info.Caption)
+	}
+	return info, nil
+}
+
+func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, error) {
 	cookiesMu.RLock()
 	ck := cookies
 	cookiesMu.RUnlock()

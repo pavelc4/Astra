@@ -1,0 +1,173 @@
+<h1 align="center">
+    Astra
+</h1>
+<p align="center">
+    <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&colorA=363A4F&logo=go&logoColor=D9E0EE">
+    <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&colorA=363A4F&logo=docker&logoColor=D9E0EE">
+    <img src="https://img.shields.io/badge/REST%20API-363A4F?style=for-the-badge&colorA=363A4F&logo=swagger&logoColor=D9E0EE">
+</p>
+
+---
+
+## About
+
+Astra is a universal media downloader API backend written in Go. It extracts video, photo, slideshow, and audio content from a wide range of social and sharing platforms through a single unified REST interface.
+
+---
+
+## Supported Platforms
+
+1. **TikTok** (Videos, Slideshows, Music, Profiles)
+2. **Instagram** (Reels/Videos, Posts/Photos, Profiles, Stories)
+3. **Facebook** (Public Videos, Images, Group Content)
+4. **Threads** (Posts, Videos, Photos)
+5. **Reddit** (Videos, Images, Galleries)
+6. **Twitter / X** (Videos, Photos)
+7. **Pinterest** (Videos, Images)
+8. **YouTube** (Videos and Audio via hybrid `yt-dlp` wrapper)
+9. **LinkedIn** (Videos, Public Images fallback crawler)
+10. **TeraBox** (Files, Multi-file folders, and streaming m3u8 playlists)
+11. **Spotify** (Track/Album metadata and downloads)
+12. **Soundcloud** (Audio)
+13. **CapCut** (Templates and videos)
+
+---
+
+## Architecture Overview
+
+Astra follows Go best practices with an emphasis on concurrency safety and maintainability.
+
+* **`cmd/server/`** — Entrypoint (`main.go`), route mapping (`routes.go`), and integration tests.
+* **`internal/platform/`** — Independent platform scraper engines, isolated into subpackages (`youtube`, `terabox`, `tiktok`, etc).
+* **`internal/handler/`** — HTTP handlers wrapping platform execution logic via a generic `makeDownloadHandler` helper for uniform validation, execution, and JSON responses.
+* **`internal/httpclient/`** — Tuned global `http.Client` with optimized connection pooling (`MaxIdleConnsPerHost = 100`) for connection reuse under scraping load.
+* **`internal/types/`** — Shared data structures such as `DownloadItem` and `MediaType`.
+* **`internal/errors/`** — Custom error types (`Validation`, `Upstream`, `RateLimit`) mapped to appropriate HTTP status codes.
+
+**Design notes:**
+* Go Generics unify 11+ handlers under a single template, reducing boilerplate.
+* `context.Context` is propagated from the HTTP request down to every child scraper, enforcing timeouts and resource cleanup automatically.
+* Graceful shutdown via `SIGINT`/`SIGTERM` interception, allowing in-flight requests to finish within a timeout window.
+* Structured logging through Go's standard `slog`.
+* Mutex-based rate-limit queues (e.g. for TikTok) are tuned to avoid blocking system threads under heavy traffic.
+
+---
+
+## Development Setup
+
+### Prerequisites
+- Go 1.20+
+- `yt-dlp` binary (for YouTube extraction)
+
+### Running Locally
+```bash
+go run ./cmd/server
+```
+
+### Building for Production
+```bash
+go build -ldflags="-s -w" -o astra ./cmd/server
+```
+This produces a stripped, optimized binary named `astra`.
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in the values:
+```bash
+cp .env.example .env
+```
+
+| Variable | Description | Default |
+|---|---|---|
+| `PORT` | Server listening port | `3000` |
+| `HOST` | Server host interface | `0.0.0.0` |
+| `INSTAGRAM_COOKIES` | Session cookies for Instagram API access | Optional |
+| `YOUTUBE_COOKIES_FILE` | Path to exported cookie file for `yt-dlp` | `yt-cookies.txt` |
+| `YT_DLP_PATH` | Path to custom `yt-dlp` executable | Optional |
+
+---
+
+## Cookie Exporting Guide
+
+Some platforms require session cookies to access content behind logins or age-gates.
+
+### Instagram
+1. Log in to [instagram.com](https://www.instagram.com) in your browser.
+2. Open DevTools (`F12`) → **Application** → **Cookies** → `https://www.instagram.com`.
+3. Copy the values of `sessionid` and `csrftoken`.
+4. Add to `.env`:
+   ```env
+   INSTAGRAM_COOKIES="sessionid=YOUR_SESSION_ID_HERE; csrftoken=YOUR_CSRF_TOKEN_HERE"
+   ```
+
+### Facebook
+Most public Facebook media is scraped directly via HTML/SnapSave-style parsers. For advanced setups, custom headers or browser-based cookies can be configured directly inside `internal/platform/facebook/`.
+
+### YouTube (`yt-dlp`)
+1. Install a cookie exporter extension (e.g. **Get Cookies.txt**) in your browser.
+2. Log in to [youtube.com](https://www.youtube.com).
+3. Export cookies in **Netscape** format and save as `yt-cookies.txt` in the project root.
+4. Set in `.env`:
+   ```env
+   YOUTUBE_COOKIES_FILE="yt-cookies.txt"
+   ```
+
+---
+
+## Deployment
+
+### `yt-dlp` Resolution
+Astra resolves the `yt-dlp` binary in the following order:
+1. `YT_DLP_PATH` environment variable, if set.
+2. Local `./yt-dlp` in the project root.
+3. System-wide `yt-dlp` resolved via `$PATH`.
+
+To install locally:
+```bash
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o yt-dlp
+chmod +x yt-dlp
+```
+
+### Running as a systemd Service
+```bash
+sudo nano /etc/systemd/system/astra.service
+```
+```ini
+[Unit]
+Description=Astra Universal Downloader API Service
+After=network.target
+
+[Service]
+Type=simple
+User=sineva
+WorkingDirectory=/home/sineva/prjkt/go/astra
+ExecStart=/home/sineva/prjkt/go/astra/astra
+Restart=always
+RestartSec=5
+Environment=PORT=3000
+Environment=HOST=0.0.0.0
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable astra
+sudo systemctl start astra
+sudo systemctl status astra
+```
+
+---
+
+## Requirements
+- **Go** – 1.20 or above
+- **yt-dlp** – for YouTube extraction support
+- **Linux/macOS/Windows** – cross-platform server binary
+
+---
+
+## License
+Astra is open-sourced software licensed under the **MIT License**.
+See the [LICENSE](LICENSE) file for more information.

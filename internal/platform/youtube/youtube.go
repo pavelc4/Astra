@@ -55,10 +55,14 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		args = append([]string{"--cookies", cookieFile}, args...)
 	}
 
-	// 3. Execute command with context (fallback to local ./yt-dlp binary if exists)
-	ytDlpPath := "yt-dlp"
-	if _, err := os.Stat("./yt-dlp"); err == nil {
-		ytDlpPath = "./yt-dlp"
+	// 3. Execute command with context (hybrid check: env path -> local ./yt-dlp binary -> system yt-dlp)
+	ytDlpPath := os.Getenv("YT_DLP_PATH")
+	if ytDlpPath == "" {
+		if _, err := os.Stat("./yt-dlp"); err == nil {
+			ytDlpPath = "./yt-dlp"
+		} else {
+			ytDlpPath = "yt-dlp"
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, ytDlpPath, args...)

@@ -13,19 +13,14 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
+	"github.com/pavelc4/astra/internal/types"
 )
 
-type DownloadItem struct {
-	Quality string `json:"quality"`
-	Format  string `json:"format"`
-	URL     string `json:"url"`
-}
-
 type Result struct {
-	Platform  string         `json:"platform"`
-	Title     string         `json:"title"`
-	Thumbnail string         `json:"thumbnail,omitempty"`
-	Downloads []DownloadItem `json:"downloads"`
+	Platform  string               `json:"platform"`
+	Title     string               `json:"title"`
+	Thumbnail string               `json:"thumbnail,omitempty"`
+	Downloads []types.DownloadItem `json:"downloads"`
 }
 
 var reVReddit = regexp.MustCompile(`https://v\.redd\.it/[^\s"<&]+`)
@@ -73,7 +68,7 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	// Extract title from h2.text-center.text-truncate
 	title := strings.TrimSpace(doc.Find("h2.text-center.text-truncate").First().Text())
 
-	var downloads []DownloadItem
+	var downloads []types.DownloadItem
 	var thumbnail string
 
 	doc.Find("a.downloadbutton").Each(func(_ int, s *goquery.Selection) {
@@ -96,17 +91,17 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		}
 
 		if videoURL != "" {
-			format := "mp4"
 			quality := "hd"
 			if strings.Contains(strings.ToLower(videoURL), "cmaf_720") || strings.Contains(strings.ToLower(videoURL), "720") {
 				quality = "720p"
 			} else if strings.Contains(strings.ToLower(videoURL), "1080") {
 				quality = "1080p"
 			}
-			downloads = append(downloads, DownloadItem{
-				Quality: quality,
-				Format:  format,
+			downloads = append(downloads, types.DownloadItem{
+				Label:   "Video " + quality,
 				URL:     href,
+				Type:    types.MediaVideo,
+				Quality: quality,
 			})
 			if thumbnail == "" {
 				thumbMatch := doc.Find("img.img-fluid").First()
@@ -119,19 +114,23 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 				thumbnail = href
 			}
 			ext := "image"
+			mediaType := types.MediaImage
 			if strings.HasSuffix(href, ".gif") {
 				ext = "gif"
+				mediaType = types.MediaVideo
 			}
-			downloads = append(downloads, DownloadItem{
-				Quality: "original",
-				Format:  ext,
+			downloads = append(downloads, types.DownloadItem{
+				Label:   "Image " + ext,
 				URL:     href,
+				Type:    mediaType,
+				Quality: "original",
 			})
 		} else if strings.Contains(href, "reddit.com/gallery/") {
-			downloads = append(downloads, DownloadItem{
-				Quality: "gallery",
-				Format:  "link",
+			downloads = append(downloads, types.DownloadItem{
+				Label:   "Gallery Link",
 				URL:     href,
+				Type:    types.MediaImage,
+				Quality: "gallery",
 			})
 		}
 	})

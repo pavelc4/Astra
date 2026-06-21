@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lmittmann/tint"
 	"github.com/pavelc4/astra/internal/config"
+	"github.com/pavelc4/astra/internal/handler"
 )
 
 func main() {
@@ -74,9 +76,18 @@ func main() {
 
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddUint64(&handler.TotalRequests, 1)
+
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
+
+		if ww.Status() >= 400 {
+			atomic.AddUint64(&handler.FailedRequests, 1)
+		} else {
+			atomic.AddUint64(&handler.SuccessRequests, 1)
+		}
+
 		slog.LogAttrs(r.Context(), slog.LevelInfo, "request",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),

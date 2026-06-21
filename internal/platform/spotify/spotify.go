@@ -10,11 +10,31 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
+	"github.com/pavelc4/astra/internal/types"
 )
 
 type Result struct {
-	Platform string          `json:"platform"`
-	Raw      json.RawMessage `json:"raw"`
+	Platform  string               `json:"platform"`
+	Title     string               `json:"title"`
+	Thumbnail string               `json:"thumbnail,omitempty"`
+	Downloads []types.DownloadItem `json:"downloads"`
+}
+
+type SpotifyMetadata struct {
+	Name     string `json:"name"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album"`
+	Duration string `json:"duration"`
+	Image    string `json:"image"`
+	Download string `json:"download"`
+}
+
+type SpotifyData struct {
+	Metadata SpotifyMetadata `json:"metadata"`
+}
+
+type SpotifyRawResponse struct {
+	Data SpotifyData `json:"data"`
 }
 
 func FetchData(ctx context.Context, targetURL string) (*Result, error) {
@@ -48,5 +68,29 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("MusicFab response read failed")
 	}
 
-	return &Result{Platform: "spotify", Raw: json.RawMessage(body)}, nil
+	var raw SpotifyRawResponse
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, errors.NewUpstream("failed to parse Spotify response")
+	}
+
+	meta := raw.Data.Metadata
+	if meta.Download == "" {
+		return nil, errors.NewUpstream("no downloadable media found in Spotify track")
+	}
+
+	downloads := []types.DownloadItem{
+		{
+			Label:   fmt.Sprintf("Audio (%s - %s)", meta.Artist, meta.Name),
+			URL:     meta.Download,
+			Type:    types.MediaAudio,
+			Quality: "320kbps",
+		},
+	}
+
+	return &Result{
+		Platform:  "spotify",
+		Title:     fmt.Sprintf("%s - %s", meta.Artist, meta.Name),
+		Thumbnail: meta.Image,
+		Downloads: downloads,
+	}, nil
 }

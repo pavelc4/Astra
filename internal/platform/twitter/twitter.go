@@ -2,6 +2,7 @@ package twitter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,11 @@ type Result struct {
 	Duration  *string              `json:"duration"`
 	Thumbnail *string              `json:"thumbnail"`
 	Downloads []types.DownloadItem `json:"downloads"`
+}
+
+type AjaxResponse struct {
+	Status string `json:"status"`
+	Data   string `json:"data"`
 }
 
 func FetchData(ctx context.Context, tweetURL string) (*Result, error) {
@@ -56,7 +62,12 @@ func FetchData(ctx context.Context, tweetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("SaveTwitter response read failed")
 	}
 
-	return parseResult(body), nil
+	var ajaxResp AjaxResponse
+	if err := json.Unmarshal(body, &ajaxResp); err != nil {
+		return nil, errors.NewUpstream("failed to parse SaveTwitter JSON response")
+	}
+
+	return parseResult([]byte(ajaxResp.Data)), nil
 }
 
 var qualityRe = regexp.MustCompile(`\((\d+p)\)`)
@@ -106,15 +117,18 @@ func parseResult(data []byte) *Result {
 				quality = m[1]
 			}
 			downloads = append(downloads, types.DownloadItem{
+				Label:   fmt.Sprintf("Video %s", quality),
 				Quality: quality,
 				URL:     href,
 				Type:    types.MediaVideo,
 			})
 		}
-		if strings.Contains(text, "图片") {
+		if strings.Contains(text, "图片") || strings.Contains(strings.ToLower(text), "photo") || strings.Contains(strings.ToLower(text), "image") {
 			downloads = append(downloads, types.DownloadItem{
-				URL:  href,
-				Type: types.MediaImage,
+				Label:   "Photo",
+				URL:     href,
+				Type:    types.MediaImage,
+				Quality: "original",
 			})
 		}
 	})
@@ -123,8 +137,10 @@ func parseResult(data []byte) *Result {
 		src, ok := s.Attr("src")
 		if ok {
 			downloads = append(downloads, types.DownloadItem{
-				URL:  src,
-				Type: types.MediaImage,
+				Label:   "Photo",
+				URL:     src,
+				Type:    types.MediaImage,
+				Quality: "original",
 			})
 		}
 	})

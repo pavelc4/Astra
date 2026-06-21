@@ -156,8 +156,10 @@ type mobileMediaItem struct {
 	CarouselMedia []struct {
 		MediaType     int `json:"media_type"`
 		VideoVersions []struct {
-			Type int    `json:"type"`
-			URL  string `json:"url"`
+			Type   int    `json:"type"`
+			URL    string `json:"url"`
+			Width  int    `json:"width"`
+			Height int    `json:"height"`
 		} `json:"video_versions"`
 		ImageVersions2 *struct {
 			Candidates []struct {

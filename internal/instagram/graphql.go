@@ -178,8 +178,18 @@ func convertMediaItem(item *mobileMediaItem) *MediaInfo {
 	}
 
 	if item.MediaType == 2 {
-		// single video
-		for _, v := range item.VideoVersions {
+		// single video - select highest resolution version
+		if len(item.VideoVersions) > 0 {
+			bestIdx := 0
+			bestRes := item.VideoVersions[0].Width * item.VideoVersions[0].Height
+			for i := 1; i < len(item.VideoVersions); i++ {
+				res := item.VideoVersions[i].Width * item.VideoVersions[i].Height
+				if res > bestRes {
+					bestRes = res
+					bestIdx = i
+				}
+			}
+			v := item.VideoVersions[bestIdx]
 			result.Videos = append(result.Videos, MediaItem{
 				Quality: fmt.Sprintf("%dx%d", v.Width, v.Height),
 				URL:     v.URL,
@@ -189,8 +199,22 @@ func convertMediaItem(item *mobileMediaItem) *MediaInfo {
 		// carousel
 		for _, cm := range item.CarouselMedia {
 			if cm.MediaType == 2 {
-				for _, v := range cm.VideoVersions {
-					result.Videos = append(result.Videos, MediaItem{URL: v.URL})
+				// select highest resolution version for this slide
+				if len(cm.VideoVersions) > 0 {
+					bestIdx := 0
+					bestRes := cm.VideoVersions[0].Width * cm.VideoVersions[0].Height
+					for i := 1; i < len(cm.VideoVersions); i++ {
+						res := cm.VideoVersions[i].Width * cm.VideoVersions[i].Height
+						if res > bestRes {
+							bestRes = res
+							bestIdx = i
+						}
+					}
+					v := cm.VideoVersions[bestIdx]
+					result.Videos = append(result.Videos, MediaItem{
+						Quality: fmt.Sprintf("%dx%d", v.Width, v.Height),
+						URL:     v.URL,
+					})
 				}
 			} else {
 				if cm.ImageVersions2 != nil && len(cm.ImageVersions2.Candidates) > 0 {

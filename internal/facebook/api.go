@@ -453,23 +453,28 @@ func queryGraphQL(ctx context.Context, videoID, dtsg, ck string) (*MediaInfo, er
 func extractFromPage(html string, videoID string) (*MediaInfo, error) {
 	// Attempt to locate playable URLs embedded in RelayPrefetchedData.
 	// This is the same approach yt-dlp uses as its primary extraction path.
-	relayRe := regexp.MustCompile(`"playable_url(?:_quality_hd)?":"(https?:\\?/\\?/[^"]+)"`)
-	matches := relayRe.FindAllStringSubmatch(html, -1)
-	if len(matches) == 0 {
+	hdRe := regexp.MustCompile(`"playable_url_quality_hd":"(https?:\\?/\\?/[^"]+)"`)
+	sdRe := regexp.MustCompile(`"playable_url":"(https?:\\?/\\?/[^"]+)"`)
+
+	var videoURL string
+	var quality string
+
+	if m := hdRe.FindStringSubmatch(html); len(m) > 1 {
+		videoURL = m[1]
+		quality = "hd"
+	} else if m := sdRe.FindStringSubmatch(html); len(m) > 1 {
+		videoURL = m[1]
+		quality = "sd"
+	}
+
+	if videoURL == "" {
 		return nil, fmt.Errorf("no playable URL found in page data")
 	}
 
 	info := &MediaInfo{}
-
-	seen := map[string]bool{}
-	for _, m := range matches {
-		u := m[1]
-		clean := strings.ReplaceAll(u, `\/`, `/`)
-		if seen[clean] {
-			continue
-		}
-		seen[clean] = true
-		info.Videos = append(info.Videos, MediaItem{URL: clean})
+	clean := strings.ReplaceAll(videoURL, `\/`, `/`)
+	info.Videos = []MediaItem{
+		{Quality: quality, URL: clean},
 	}
 
 	titleRe := regexp.MustCompile(`"name":"([^"]+)"`)
@@ -481,10 +486,6 @@ func extractFromPage(html string, videoID string) (*MediaInfo, error) {
 	if t := thumbRe.FindStringSubmatch(html); len(t) > 1 {
 		thumb := strings.ReplaceAll(t[1], `\/`, `/`)
 		info.Thumbnail = &thumb
-	}
-
-	if len(info.Videos) == 0 {
-		return nil, fmt.Errorf("no videos found in page data")
 	}
 
 	return info, nil
@@ -542,8 +543,7 @@ func fetchVideoViaEmbed(ctx context.Context, targetURL, ck string) (*MediaInfo, 
 	info := &MediaInfo{}
 	if hdURL != "" {
 		info.Videos = append(info.Videos, MediaItem{Quality: "hd", URL: hdURL})
-	}
-	if sdURL != "" {
+	} else if sdURL != "" {
 		info.Videos = append(info.Videos, MediaItem{Quality: "sd", URL: sdURL})
 	}
 

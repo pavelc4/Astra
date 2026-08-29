@@ -12,15 +12,8 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
-	"github.com/pavelc4/astra/internal/types"
+	"github.com/pavelc4/astra/internal/media"
 )
-
-type Result struct {
-	Platform  string               `json:"platform"`
-	Title     string               `json:"title"`
-	Thumbnail string               `json:"thumbnail,omitempty"`
-	Downloads []types.DownloadItem `json:"downloads"`
-}
 
 // pinterestClient is a custom http.Client configured to follow redirects for pin.it URLs.
 var pinterestClient = &http.Client{
@@ -28,7 +21,7 @@ var pinterestClient = &http.Client{
 	Transport: httpclient.Client.Transport,
 }
 
-func FetchData(ctx context.Context, targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*media.Media, error) {
 	// 1. Resolve final URL to extract Pin ID
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
@@ -129,7 +122,7 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		}
 	}
 
-	var downloads []types.DownloadItem
+	var downloads []media.Item
 
 	// reM3U8Sig extracts the video signature from a Pinterest HLS m3u8 URL.
 	// e.g. https://v1.pinimg.com/videos/iht/hls/11/09/fe/1109feab967bec9c087b8a1c799ee244.m3u8
@@ -190,8 +183,8 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 
 	// extractVideoDownloads converts a video_list map into direct MP4 DownloadItems.
 	// It fetches the m3u8 playlist to detect actual available resolutions.
-	extractVideoDownloads := func(videoList map[string]interface{}) []types.DownloadItem {
-		var items []types.DownloadItem
+	extractVideoDownloads := func(videoList map[string]interface{}) []media.Item {
+		var items []media.Item
 		for _, val := range videoList {
 			vMap, ok := val.(map[string]interface{})
 			if !ok {
@@ -217,20 +210,20 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 				}
 				for _, q := range qualities {
 					directURL := fmt.Sprintf("%s/%s_%s.cmfv", baseURL, sig, q.Suffix)
-					items = append(items, types.DownloadItem{
+					items = append(items, media.Item{
 						Label:   "Video " + q.Label,
 						URL:     directURL,
-						Type:    types.MediaVideo,
+						Type:    media.Video,
 						Quality: q.Label,
 					})
 				}
 				return items // return after first successful signature extraction
 			}
 			// Fallback: return the m3u8 as-is if no signature found
-			items = append(items, types.DownloadItem{
+			items = append(items, media.Item{
 				Label:   "Video HLS",
 				URL:     u,
-				Type:    types.MediaVideo,
+				Type:    media.Video,
 				Quality: "hls",
 			})
 			return items
@@ -279,18 +272,13 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 
 	// 6. If no video found, add the original image as a download option
 	if !videoFound && thumbnail != "" {
-		downloads = append(downloads, types.DownloadItem{
+		downloads = append(downloads, media.Item{
 			Label:   "Image original",
 			URL:     thumbnail,
-			Type:    types.MediaImage,
+			Type:    media.Image,
 			Quality: "original",
 		})
 	}
 
-	return &Result{
-		Platform:  "pinterest",
-		Title:     title,
-		Thumbnail: thumbnail,
-		Downloads: downloads,
-	}, nil
+	return media.Downloads("pinterest", title, thumbnail, downloads), nil
 }

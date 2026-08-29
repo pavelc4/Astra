@@ -10,15 +10,8 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
-	"github.com/pavelc4/astra/internal/types"
+	"github.com/pavelc4/astra/internal/media"
 )
-
-type Result struct {
-	Platform  string               `json:"platform"`
-	Title     string               `json:"title"`
-	Thumbnail string               `json:"thumbnail,omitempty"`
-	Downloads []types.DownloadItem `json:"downloads"`
-}
 
 type SpotifyMetadata struct {
 	Name     string `json:"name"`
@@ -37,7 +30,7 @@ type SpotifyRawResponse struct {
 	Data SpotifyData `json:"data"`
 }
 
-func FetchData(ctx context.Context, targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*media.Media, error) {
 	payload, _ := json.Marshal(map[string]string{"url": targetURL})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://musicfab.io/api/spotify", bytes.NewReader(payload))
@@ -78,19 +71,14 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("no downloadable media found in Spotify track")
 	}
 
-	downloads := []types.DownloadItem{
+	downloads := []media.Item{
 		{
 			Label:   fmt.Sprintf("Audio (%s - %s)", meta.Artist, meta.Name),
 			URL:     meta.Download,
-			Type:    types.MediaAudio,
+			Type:    media.Audio,
 			Quality: "320kbps",
 		},
 	}
 
-	return &Result{
-		Platform:  "spotify",
-		Title:     fmt.Sprintf("%s - %s", meta.Artist, meta.Name),
-		Thumbnail: meta.Image,
-		Downloads: downloads,
-	}, nil
+	return media.Downloads("spotify", fmt.Sprintf("%s - %s", meta.Artist, meta.Name), meta.Image, downloads), nil
 }

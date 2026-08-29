@@ -12,15 +12,8 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
-	"github.com/pavelc4/astra/internal/types"
+	"github.com/pavelc4/astra/internal/media"
 )
-
-type Result struct {
-	Platform  string               `json:"platform"`
-	Title     string               `json:"title"`
-	Thumbnail string               `json:"thumbnail,omitempty"`
-	Downloads []types.DownloadItem `json:"downloads"`
-}
 
 type RawMedia struct {
 	URL            string `json:"url"`
@@ -36,7 +29,7 @@ type RawResponse struct {
 	Medias    []RawMedia `json:"medias"`
 }
 
-func FetchData(ctx context.Context, targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*media.Media, error) {
 	token := "8b6e170975d92939bb67d8db567f82e43fa2da91e00a84f258af77c1186c5e8a"
 	encodedURL := base64.StdEncoding.EncodeToString([]byte(targetURL))
 	hash := url.QueryEscape(encodedURL + "1043YWlvLWRs")
@@ -70,18 +63,18 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("failed to parse SoundCloud response")
 	}
 
-	var downloads []types.DownloadItem
+	var downloads []media.Item
 	for _, m := range raw.Medias {
 		if strings.HasSuffix(m.URL, ".json") {
 			continue
 		}
 
-		mediaType := types.MediaAudio
+		mediaType := media.Audio
 		if !m.AudioAvailable {
-			mediaType = types.MediaVideo
+			mediaType = media.Video
 		}
 
-		downloads = append(downloads, types.DownloadItem{
+		downloads = append(downloads, media.Item{
 			Label:   fmt.Sprintf("Audio %s (%s)", m.Quality, m.Extension),
 			URL:     m.URL,
 			Type:    mediaType,
@@ -93,10 +86,5 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("no downloadable media found in SoundCloud post")
 	}
 
-	return &Result{
-		Platform:  "soundcloud",
-		Title:     raw.Title,
-		Thumbnail: raw.Thumbnail,
-		Downloads: downloads,
-	}, nil
+	return media.Downloads("soundcloud", raw.Title, raw.Thumbnail, downloads), nil
 }

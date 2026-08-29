@@ -13,20 +13,13 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
-	"github.com/pavelc4/astra/internal/types"
+	"github.com/pavelc4/astra/internal/media"
 )
-
-type Result struct {
-	Platform  string               `json:"platform"`
-	Title     string               `json:"title"`
-	Thumbnail string               `json:"thumbnail,omitempty"`
-	Downloads []types.DownloadItem `json:"downloads"`
-}
 
 var reVReddit = regexp.MustCompile(`https://v\.redd\.it/[^\s"<&]+`)
 var reImgRedd = regexp.MustCompile(`https://i\.redd\.it/[^\s"<]+`)
 
-func FetchData(ctx context.Context, targetURL string) (*Result, error) {
+func FetchData(ctx context.Context, targetURL string) (*media.Media, error) {
 	// Normalize URL: strip query params and trailing slash for cleaner rapidsave request
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -68,7 +61,7 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 	// Extract title from h2.text-center.text-truncate
 	title := strings.TrimSpace(doc.Find("h2.text-center.text-truncate").First().Text())
 
-	var downloads []types.DownloadItem
+	var downloads []media.Item
 	var thumbnail string
 
 	doc.Find("a.downloadbutton").Each(func(_ int, s *goquery.Selection) {
@@ -97,10 +90,10 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 			} else if strings.Contains(strings.ToLower(videoURL), "1080") {
 				quality = "1080p"
 			}
-			downloads = append(downloads, types.DownloadItem{
+			downloads = append(downloads, media.Item{
 				Label:   "Video " + quality,
 				URL:     href,
-				Type:    types.MediaVideo,
+				Type:    media.Video,
 				Quality: quality,
 			})
 			if thumbnail == "" {
@@ -114,22 +107,22 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 				thumbnail = href
 			}
 			ext := "image"
-			mediaType := types.MediaImage
+			mediaType := media.Image
 			if strings.HasSuffix(href, ".gif") {
 				ext = "gif"
-				mediaType = types.MediaVideo
+				mediaType = media.Video
 			}
-			downloads = append(downloads, types.DownloadItem{
+			downloads = append(downloads, media.Item{
 				Label:   "Image " + ext,
 				URL:     href,
 				Type:    mediaType,
 				Quality: "original",
 			})
 		} else if strings.Contains(href, "reddit.com/gallery/") {
-			downloads = append(downloads, types.DownloadItem{
+			downloads = append(downloads, media.Item{
 				Label:   "Gallery Link",
 				URL:     href,
-				Type:    types.MediaImage,
+				Type:    media.Image,
 				Quality: "gallery",
 			})
 		}
@@ -139,10 +132,5 @@ func FetchData(ctx context.Context, targetURL string) (*Result, error) {
 		return nil, errors.NewUpstream("no downloadable media found in Reddit post")
 	}
 
-	return &Result{
-		Platform:  "reddit",
-		Title:     title,
-		Thumbnail: thumbnail,
-		Downloads: downloads,
-	}, nil
+	return media.Downloads("reddit", title, thumbnail, downloads), nil
 }

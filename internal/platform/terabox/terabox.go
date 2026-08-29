@@ -15,15 +15,8 @@ import (
 
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/httpclient"
-	"github.com/pavelc4/astra/internal/types"
+	"github.com/pavelc4/astra/internal/media"
 )
-
-type Result struct {
-	Platform  string               `json:"platform"`
-	Title     string               `json:"title"`
-	Thumbnail string               `json:"thumbnail,omitempty"`
-	Downloads []types.DownloadItem `json:"downloads"`
-}
 
 type teraboxFile struct {
 	Name         string          `json:"name"`
@@ -45,7 +38,7 @@ type teraboxData struct {
 
 var nonceRe = regexp.MustCompile(`"nonce":"(.*?)"`)
 
-func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
+func FetchData(ctx context.Context, teraboxURL string) (*media.Media, error) {
 	nonce, err := fetchNonce(ctx)
 	if err != nil {
 		return nil, err
@@ -108,7 +101,7 @@ func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
 		return nil, errors.NewUpstream("Terabox API returned non-success status")
 	}
 
-	var downloads []types.DownloadItem
+	var downloads []media.Item
 	var title string
 	var thumbnail string
 
@@ -120,18 +113,18 @@ func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
 			thumbnail = file.ThumbnailURL
 		}
 
-		mediaType := types.MediaVideo
+		mediaType := media.Video
 		switch file.FileType {
 		case "video":
-			mediaType = types.MediaVideo
+			mediaType = media.Video
 		case "image":
-			mediaType = types.MediaImage
+			mediaType = media.Image
 		case "audio":
-			mediaType = types.MediaAudio
+			mediaType = media.Audio
 		}
 
 		if file.DownloadURL != "" {
-			downloads = append(downloads, types.DownloadItem{
+			downloads = append(downloads, media.Item{
 				Label:   file.Name,
 				URL:     file.DownloadURL,
 				Type:    mediaType,
@@ -144,10 +137,10 @@ func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
 			if err := json.Unmarshal(file.StreamURLs, &streamMap); err == nil {
 				for q, url := range streamMap {
 					if url != "" {
-						downloads = append(downloads, types.DownloadItem{
+						downloads = append(downloads, media.Item{
 							Label:   fmt.Sprintf("%s (Stream %s)", file.Name, q),
 							URL:     url,
-							Type:    types.MediaVideo,
+							Type:    media.Video,
 							Quality: q,
 						})
 					}
@@ -155,10 +148,10 @@ func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
 			} else {
 				var streamStr string
 				if err := json.Unmarshal(file.StreamURLs, &streamStr); err == nil && streamStr != "" {
-					downloads = append(downloads, types.DownloadItem{
+					downloads = append(downloads, media.Item{
 						Label:   fmt.Sprintf("%s (Stream)", file.Name),
 						URL:     streamStr,
-						Type:    types.MediaVideo,
+						Type:    media.Video,
 						Quality: file.Quality,
 					})
 				}
@@ -166,12 +159,7 @@ func FetchData(ctx context.Context, teraboxURL string) (*Result, error) {
 		}
 	}
 
-	return &Result{
-		Platform:  "terabox",
-		Title:     title,
-		Thumbnail: thumbnail,
-		Downloads: downloads,
-	}, nil
+	return media.Downloads("terabox", title, thumbnail, downloads), nil
 }
 
 func fetchNonce(ctx context.Context) (string, error) {

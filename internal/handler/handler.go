@@ -12,12 +12,24 @@ import (
 	"github.com/pavelc4/astra/internal/response"
 )
 
-var downloadCache = cache.NewMemoryCache(5 * time.Minute)
+// Handlers holds the HTTP layer's injected dependencies. Constructed once at the
+// composition root (main) and wired via Register — no package-level handler or
+// cache globals.
+type Handlers struct {
+	cache            *cache.MemoryCache
+	cacheTTL         time.Duration
+	negativeCacheTTL time.Duration
+}
 
-const (
-	cacheTTL         = 15 * time.Minute
-	negativeCacheTTL = 3 * time.Minute
-)
+// New builds Handlers with a fresh in-memory download cache. Tests can construct
+// their own instance to get an isolated cache.
+func New() *Handlers {
+	return &Handlers{
+		cache:            cache.NewMemoryCache(5 * time.Minute),
+		cacheTTL:         15 * time.Minute,
+		negativeCacheTTL: 3 * time.Minute,
+	}
+}
 
 type cacheEntry struct {
 	data interface{}
@@ -48,8 +60,10 @@ func normalizeURL(rawURL string) string {
 	return parsed.String()
 }
 
-// makeDownloadHandler creates a standard download handler for a given fetch function.
-func makeDownloadHandler[T any](fetchFunc func(ctx context.Context, url string) (T, error), successMsg string) http.HandlerFunc {
+// download builds a caching download handler for a fetch function. Go doesn't
+// allow generic methods, so the injected *Handlers is passed as the first
+// argument to reach the request cache.
+func download[T any](h *Handlers, fetchFunc func(ctx context.Context, url string) (T, error), successMsg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rawUrl := r.URL.Query().Get("url")
 		if rawUrl == "" {
@@ -59,7 +73,7 @@ func makeDownloadHandler[T any](fetchFunc func(ctx context.Context, url string) 
 
 		normalizedUrl := normalizeURL(rawUrl)
 
-		if cachedVal, found := downloadCache.Get(normalizedUrl); found {
+		if cachedVal, found := h.cache.Get(normalizedUrl); found {
 			if entry, ok := cachedVal.(cacheEntry); ok {
 				if entry.err != nil {
 					response.HandleError(w, entry.err)
@@ -74,12 +88,12 @@ func makeDownloadHandler[T any](fetchFunc func(ctx context.Context, url string) 
 
 		data, err := fetchFunc(r.Context(), normalizedUrl)
 		if err != nil {
-			downloadCache.Set(normalizedUrl, cacheEntry{err: err}, negativeCacheTTL)
+			h.cache.Set(normalizedUrl, cacheEntry{err: err}, h.negativeCacheTTL)
 			response.HandleError(w, err)
 			return
 		}
 
-		downloadCache.Set(normalizedUrl, cacheEntry{data: data}, cacheTTL)
+		h.cache.Set(normalizedUrl, cacheEntry{data: data}, h.cacheTTL)
 		response.OK(w, data, successMsg)
 	}
 }

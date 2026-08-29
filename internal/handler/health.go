@@ -52,12 +52,12 @@ func HandleHealth(w http.ResponseWriter, r *http.Request) {
 			"free":  diskFree,
 		},
 		"memory": map[string]any{
-			"heapAlloc":  m.HeapAlloc,
-			"heapInuse":  m.HeapInuse,
+			"heapAlloc":   m.HeapAlloc,
+			"heapInuse":   m.HeapInuse,
 			"heapObjects": m.HeapObjects,
-			"stackInuse": m.StackInuse,
-			"gcCycles":   m.NumGC,
-			"gcPause":    m.PauseTotalNs,
+			"stackInuse":  m.StackInuse,
+			"gcCycles":    m.NumGC,
+			"gcPause":     m.PauseTotalNs,
 		},
 	}
 

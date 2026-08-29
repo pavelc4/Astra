@@ -25,7 +25,7 @@ func main() {
 		TimeFormat: time.StampMilli,
 	})))
 
-	slog.Info("cookies check", 
+	slog.Info("cookies check",
 		"instagram_loaded", os.Getenv("INSTAGRAM_COOKIES") != "",
 		"facebook_loaded", os.Getenv("FACEBOOK_COOKIES") != "",
 	)
@@ -35,7 +35,7 @@ func main() {
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 
-	registerRoutes(r)
+	handler.New().Register(r)
 
 	addr := cfg.Host + ":" + cfg.Port
 

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/pavelc4/astra/internal/platform/meta"
+	"github.com/pavelc4/astra/internal/platform/meta/facebook"
 )
 
-var HandleFacebookDownload = makeDownloadHandler(meta.FetchFacebookData, "Facebook media fetched successfully")
+var HandleFacebookDownload = makeDownloadHandler(facebook.FetchData, "Facebook media fetched successfully")

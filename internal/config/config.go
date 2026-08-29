@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pavelc4/astra/internal/facebook"
 	"github.com/pavelc4/astra/internal/instagram"
+	"github.com/pavelc4/astra/internal/platform/meta/facebook"
 )
 
 type Config struct {

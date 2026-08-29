@@ -25,7 +25,7 @@ import (
 // request cache via download(h, ...); this is the single place platform routes
 // live (replacing the former one-file-per-platform handlers).
 func (h *Handlers) Register(r chi.Router) {
-	r.Get("/health", HandleHealth)
+	r.Get("/health", h.Health)
 
 	r.Route("/api/tiktok", func(r chi.Router) {
 		r.Get("/download", download(h, tiktok.FetchData, "TikTok media fetched successfully"))

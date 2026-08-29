@@ -19,7 +19,7 @@ var (
 	FailedRequests  uint64
 )
 
-func HandleHealth(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
@@ -29,6 +29,13 @@ func HandleHealth(w http.ResponseWriter, r *http.Request) {
 		diskTotal = stat.Blocks * uint64(stat.Bsize)
 		diskFree = stat.Bfree * uint64(stat.Bsize)
 		diskUsed = diskTotal - diskFree
+	}
+
+	cacheHits, cacheStale, cacheMisses := h.cache.Stats()
+	cacheTotal := cacheHits + cacheStale + cacheMisses
+	var hitRate float64
+	if cacheTotal > 0 {
+		hitRate = float64(cacheHits+cacheStale) / float64(cacheTotal)
 	}
 
 	data := map[string]any{
@@ -41,6 +48,12 @@ func HandleHealth(w http.ResponseWriter, r *http.Request) {
 			"total":   atomic.LoadUint64(&TotalRequests),
 			"success": atomic.LoadUint64(&SuccessRequests),
 			"failed":  atomic.LoadUint64(&FailedRequests),
+		},
+		"cache": map[string]any{
+			"hits":     cacheHits,
+			"stale":    cacheStale,
+			"misses":   cacheMisses,
+			"hit_rate": hitRate,
 		},
 		"cookies": map[string]bool{
 			"instagram": os.Getenv("INSTAGRAM_COOKIES") != "",

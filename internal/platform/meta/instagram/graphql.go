@@ -119,13 +119,13 @@ func (c *IGClient) FetchStories(ctx context.Context, username string) (*StoriesR
 	var resp struct {
 		ID    string `json:"id"`
 		Items []struct {
-			Pk          string `json:"pk"`
-			MediaType   int    `json:"media_type"`
-			TakenAt     int64  `json:"taken_at"`
-			VideoDuration float64 `json:"video_duration,omitempty"`
-			OriginalWidth  int  `json:"original_width"`
-			OriginalHeight int  `json:"original_height"`
-			VideoVersions []struct {
+			Pk             string  `json:"pk"`
+			MediaType      int     `json:"media_type"`
+			TakenAt        int64   `json:"taken_at"`
+			VideoDuration  float64 `json:"video_duration,omitempty"`
+			OriginalWidth  int     `json:"original_width"`
+			OriginalHeight int     `json:"original_height"`
+			VideoVersions  []struct {
 				Type int    `json:"type"`
 				URL  string `json:"url"`
 			} `json:"video_versions"`

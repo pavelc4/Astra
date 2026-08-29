@@ -6,11 +6,11 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/pavelc4/astra/internal/errors"
-	"github.com/pavelc4/astra/internal/instagram"
 	"github.com/pavelc4/astra/internal/platform/capcut"
 	"github.com/pavelc4/astra/internal/platform/linkedin"
 	"github.com/pavelc4/astra/internal/platform/meta"
 	"github.com/pavelc4/astra/internal/platform/meta/facebook"
+	"github.com/pavelc4/astra/internal/platform/meta/instagram"
 	"github.com/pavelc4/astra/internal/platform/pinterest"
 	"github.com/pavelc4/astra/internal/platform/reddit"
 	"github.com/pavelc4/astra/internal/platform/soundcloud"
@@ -36,8 +36,8 @@ func (h *Handlers) Register(r chi.Router) {
 		r.Get("/download", download(h, twitter.FetchData, "Twitter media fetched successfully"))
 	})
 	r.Route("/api/meta", func(r chi.Router) {
-		r.Get("/instagram/download", download(h, meta.FetchInstagramData, "Instagram media fetched successfully"))
-		r.Get("/instagram/profile", download(h, meta.FetchInstagramProfile, "Instagram profile fetched successfully"))
+		r.Get("/instagram/download", download(h, instagram.FetchData, "Instagram media fetched successfully"))
+		r.Get("/instagram/profile", download(h, instagram.FetchProfileByURL, "Instagram profile fetched successfully"))
 		r.Get("/instagram/stories", h.InstagramStories)
 		r.Get("/facebook/download", download(h, facebook.FetchData, "Facebook media fetched successfully"))
 		r.Get("/threads/download", download(h, meta.FetchThreadsData, "Threads media fetched successfully"))

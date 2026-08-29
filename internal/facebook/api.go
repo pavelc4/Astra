@@ -25,7 +25,86 @@ var (
 		regexp.MustCompile(`/photo(?:\.php)?\?.*?fbid=([^&]+)`),
 		regexp.MustCompile(`/photos/([^/?#]+)`),
 	}
+
+	// Locates the album/carousel block FB server-renders into the page's
+	// RelayPrefetchedStreamCache. count tells us how many photos the post has;
+	// each subsequent viewer_image/image uri is one photo.
+	albumBlockRe = regexp.MustCompile(`"all_subattachments":\{"count":(\d+)`)
+	// viewer_image is the full-resolution variant (carries height/width); image
+	// is the smaller thumbnail. Prefer viewer_image, fall back to image.
+	albumViewerRe = regexp.MustCompile(`"viewer_image":\{"height":(\d+),"width":(\d+),"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
+	albumThumbRe  = regexp.MustCompile(`"image":\{"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
 )
+
+// extractAlbumPhotos parses the multi-photo carousel FB embeds in the
+// authenticated permalink HTML (StoryAttachmentAlbumStyleRenderer). Returns nil
+// if the page has no album block — callers fall back to og:image.
+//
+// ponytail: scrapes the server-rendered Relay payload, not the GraphQL API —
+// FB killed arbitrary q= queries (doc_id-only now), but still SSRs the result
+// into the page. If FB stops embedding it, switch to a persisted doc_id call.
+func extractAlbumPhotos(htmlStr string) []MediaItem {
+	loc := albumBlockRe.FindStringSubmatchIndex(htmlStr)
+	if loc == nil {
+		return nil
+	}
+	count := 0
+	for _, c := range htmlStr[loc[2]:loc[3]] {
+		count = count*10 + int(c-'0')
+	}
+	if count < 1 {
+		return nil
+	}
+
+	// Scan only from the album block onward, and cap at count so we don't bleed
+	// into a neighbouring post's album further down the page. Dedupe by fbcdn
+	// basename (same photo appears as both viewer_image and image).
+	tail := htmlStr[loc[1]:]
+	seen := make(map[string]bool)
+	photos := make([]MediaItem, 0, count)
+
+	for _, m := range albumViewerRe.FindAllStringSubmatch(tail, count*2) {
+		clean := cleanJSURL(m[3])
+		base := photoBaseName(clean)
+		if base == "" || seen[base] {
+			continue
+		}
+		seen[base] = true
+		photos = append(photos, MediaItem{URL: clean, Quality: m[2] + "x" + m[1]}) // WxH
+		if len(photos) == count {
+			return photos
+		}
+	}
+
+	// Fallback: nodes without a viewer_image — take the thumbnail (no dims).
+	for _, m := range albumThumbRe.FindAllStringSubmatch(tail, count*2) {
+		clean := cleanJSURL(m[1])
+		base := photoBaseName(clean)
+		if base == "" || seen[base] {
+			continue
+		}
+		seen[base] = true
+		photos = append(photos, MediaItem{URL: clean})
+		if len(photos) == count {
+			break
+		}
+	}
+
+	if len(photos) == 0 {
+		return nil
+	}
+	return photos
+}
+
+// photoBaseName returns the fbcdn filename (123_456_789_n) so the same photo at
+// thumb and full-res resolution dedupes to one entry.
+func photoBaseName(u string) string {
+	m := regexp.MustCompile(`/(\d{6,}_\d+_\d+)_`).FindStringSubmatch(u)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
 
 func cleanFacebookCaption(caption string) string {
 	trimmed := strings.TrimSpace(caption)
@@ -150,12 +229,16 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 		return nil, fmt.Errorf("invalid Facebook URL path: %s", resolvedURL)
 	}
 
-	// 5. For photo/post URLs, fetch as crawler
-	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, "")
+	// 5. For photo/post URLs, fetch as crawler.
+	// Prefer cookies first: the multi-photo album is only server-rendered on the
+	// authenticated page. Without cookies FB returns a single og:image cover, so
+	// a no-cookie-first strategy would stop at 1 photo and never retry (len != 0).
+	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, ck)
 	if err != nil || len(info.Photos) == 0 {
-		// Retry with cookies if we have them
 		if ck != "" {
-			info, err = fetchPhotosViaCrawler(ctx, resolvedURL, ck)
+			// Retry unauthenticated — still yields the og:image cover for public
+			// posts if the authenticated fetch got rate-limited (400).
+			info, err = fetchPhotosViaCrawler(ctx, resolvedURL, "")
 		}
 	}
 
@@ -222,9 +305,13 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInf
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("User-Agent", "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_voiced.php)")
 	if ck != "" {
+		// Full browser headers get FB to server-render the album (bbox) instead
+		// of a bare og:image, and avoid the 400 "something went wrong" page.
+		setBrowserHeaders(req)
 		req.Header.Set("Cookie", ck)
+	} else {
+		req.Header.Set("User-Agent", "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_voiced.php)")
 	}
 
 	resp, err := httpClient.Do(req)
@@ -249,6 +336,20 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInf
 			val = t[2]
 		}
 		info.Caption = html.UnescapeString(val)
+	}
+
+	// Multi-photo carousel: prefer the server-rendered album block (all N photos)
+	// over og:image (which only ever carries the single cover thumbnail).
+	if album := extractAlbumPhotos(htmlStr); len(album) > 0 {
+		info.Photos = album
+		info.Thumbnail = &info.Photos[0].URL
+		// Authenticated album pages carry no og:title — fall back to <title>.
+		if info.Caption == "" {
+			if t := regexp.MustCompile(`<title[^>]*>([^<]+)</title>`).FindStringSubmatch(htmlStr); len(t) > 1 {
+				info.Caption = html.UnescapeString(strings.TrimSpace(t[1]))
+			}
+		}
+		return info, nil
 	}
 
 	// Extract photos

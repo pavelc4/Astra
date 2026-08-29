@@ -39,7 +39,7 @@ func FetchFacebookData(ctx context.Context, url string) (*FacebookResult, error)
 	}
 
 	for _, p := range info.Photos {
-		item := instagram.MediaItem{URL: p.URL}
+		item := instagram.MediaItem{URL: p.URL, Quality: p.Quality}
 		result.Photos = append(result.Photos, item)
 		result.Raw = append(result.Raw, item)
 	}

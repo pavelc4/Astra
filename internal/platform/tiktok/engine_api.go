@@ -1,4 +1,4 @@
-package tt
+package tiktok
 
 import (
 	"bytes"
@@ -21,8 +21,8 @@ var (
 	MaxUserFeedCount int           = 33
 	Debug                          = false
 
-	rateLimitMu      sync.Mutex
-	lastRequestTime  time.Time
+	rateLimitMu     sync.Mutex
+	lastRequestTime time.Time
 )
 
 func waitRateLimit(ctx context.Context) error {
@@ -115,10 +115,10 @@ func RawParsed[T any](ctx context.Context, method string, query map[string]strin
 type TaskSubmitResponse struct {
 	TaskId string `json:"task_id"`
 	Detail struct {
-		Id        string `json:"id"`
-		Vid       string `json:"vid"`
-		PlayUrl   string `json:"play_url"`
-		Size      int64  `json:"size"`
+		Id      string `json:"id"`
+		Vid     string `json:"vid"`
+		PlayUrl string `json:"play_url"`
+		Size    int64  `json:"size"`
 	} `json:"detail"`
 	Status int `json:"status"`
 }
@@ -182,8 +182,8 @@ func submitTask(ctx context.Context, url string) (string, error) {
 	}
 
 	var apiResp struct {
-		Code int                  `json:"code"`
-		Msg  string               `json:"msg"`
+		Code int                 `json:"code"`
+		Msg  string              `json:"msg"`
 		Data *TaskSubmitResponse `json:"data"`
 	}
 	if err := json.Unmarshal(data, &apiResp); err != nil {
@@ -204,8 +204,8 @@ func getTaskResult(ctx context.Context, taskId string) (string, int64, error) {
 	}
 
 	var apiResp struct {
-		Code int                `json:"code"`
-		Msg  string             `json:"msg"`
+		Code int                 `json:"code"`
+		Msg  string              `json:"msg"`
 		Data *TaskResultResponse `json:"data"`
 	}
 	if err := json.Unmarshal(data, &apiResp); err != nil {

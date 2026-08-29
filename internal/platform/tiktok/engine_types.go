@@ -1,23 +1,23 @@
-package tt
+package tiktok
 
 type Post struct {
-	Id          string `json:"id"`
-	VideoId     string `json:"video_id"`
-	Region      string `json:"region"`
-	Title       string `json:"title"`
-	Cover       string `json:"cover"`
-	OriginCover string `json:"origin_cover"`
-	Duration    int    `json:"duration"`
-	Play        string `json:"play"`
-	Wmplay      string `json:"wmplay"`
-	Hdplay      string `json:"hdplay"`
-	Original    string `json:"original"` // Original quality URL from task API
-	Size        int64  `json:"size"`
-	WmSize      int64  `json:"wm_size"`
-	HdSize      int64  `json:"hd_size"`
-	OriginalSize int64 `json:"original_size"` // Original quality file size
-	Music       string `json:"music"`
-	MusicInfo   struct {
+	Id           string `json:"id"`
+	VideoId      string `json:"video_id"`
+	Region       string `json:"region"`
+	Title        string `json:"title"`
+	Cover        string `json:"cover"`
+	OriginCover  string `json:"origin_cover"`
+	Duration     int    `json:"duration"`
+	Play         string `json:"play"`
+	Wmplay       string `json:"wmplay"`
+	Hdplay       string `json:"hdplay"`
+	Original     string `json:"original"` // Original quality URL from task API
+	Size         int64  `json:"size"`
+	WmSize       int64  `json:"wm_size"`
+	HdSize       int64  `json:"hd_size"`
+	OriginalSize int64  `json:"original_size"` // Original quality file size
+	Music        string `json:"music"`
+	MusicInfo    struct {
 		Id       string `json:"id"`
 		Title    string `json:"title"`
 		Play     string `json:"play"`

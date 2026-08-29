@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	tt "github.com/pavelc4/astra/internal/tiktok"
-
 	"github.com/pavelc4/astra/internal/errors"
 	"github.com/pavelc4/astra/internal/types"
 )
@@ -27,22 +25,22 @@ type Result struct {
 }
 
 type UserResult struct {
-	Platform    string  `json:"platform"`
-	Username    string  `json:"username"`
-	Nickname    string  `json:"nickname"`
-	AvatarThumb string  `json:"avatar_thumb"`
-	Avatar      string  `json:"avatar"`
+	Platform     string `json:"platform"`
+	Username     string `json:"username"`
+	Nickname     string `json:"nickname"`
+	AvatarThumb  string `json:"avatar_thumb"`
+	Avatar       string `json:"avatar"`
 	AvatarLarger string `json:"avatar_larger"`
-	Signature   string  `json:"signature"`
-	Verified    bool    `json:"verified"`
-	Followers   int     `json:"followers"`
-	Following   int     `json:"following"`
-	Likes       int     `json:"likes"`
-	Videos      int     `json:"videos"`
+	Signature    string `json:"signature"`
+	Verified     bool   `json:"verified"`
+	Followers    int    `json:"followers"`
+	Following    int    `json:"following"`
+	Likes        int    `json:"likes"`
+	Videos       int    `json:"videos"`
 }
 
 func FetchData(ctx context.Context, videoURL string) (*Result, error) {
-	post, err := tt.GetPostOriginal(ctx, videoURL)
+	post, err := GetPostOriginal(ctx, videoURL)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok fetch failed: %s", err.Error()))
 	}
@@ -108,7 +106,7 @@ func FetchUser(ctx context.Context, profileURL string) (*UserResult, error) {
 		return nil, errors.NewInvalidURL("could not extract username from URL")
 	}
 
-	detail, err := tt.GetUserDetail(ctx, username)
+	detail, err := GetUserDetail(ctx, username)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok user fetch failed: %s", err.Error()))
 	}
@@ -144,7 +142,7 @@ type MusicResult struct {
 }
 
 func FetchMusic(ctx context.Context, musicURL string) (*MusicResult, error) {
-	detail, err := tt.GetMusicDetail(ctx, musicURL)
+	detail, err := GetMusicDetail(ctx, musicURL)
 	if err != nil {
 		return nil, errors.NewUpstream(fmt.Sprintf("TikTok music fetch failed: %s", err.Error()))
 	}

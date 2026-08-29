@@ -14,6 +14,11 @@ import (
 
 var graphQLURL = "https://www.facebook.com/api/graphql/"
 
+// maxResponseBytes caps how much of an FB page we buffer. Authenticated album/
+// watch pages run ~5MB; 16MB leaves headroom while stopping a hostile or broken
+// upstream from streaming until we OOM.
+const maxResponseBytes = 16 << 20
+
 var (
 	videoIDPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`/videos/(?:[^/]+/)?(\d+)/?`),
@@ -34,6 +39,7 @@ var (
 	// is the smaller thumbnail. Prefer viewer_image, fall back to image.
 	albumViewerRe = regexp.MustCompile(`"viewer_image":\{"height":(\d+),"width":(\d+),"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
 	albumThumbRe  = regexp.MustCompile(`"image":\{"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
+	photoBaseRe   = regexp.MustCompile(`/(\d{6,}_\d+_\d+)_`)
 )
 
 // extractAlbumPhotos parses the multi-photo carousel FB embeds in the
@@ -99,7 +105,7 @@ func extractAlbumPhotos(htmlStr string) []MediaItem {
 // photoBaseName returns the fbcdn filename (123_456_789_n) so the same photo at
 // thumb and full-res resolution dedupes to one entry.
 func photoBaseName(u string) string {
-	m := regexp.MustCompile(`/(\d{6,}_\d+_\d+)_`).FindStringSubmatch(u)
+	m := photoBaseRe.FindStringSubmatch(u)
 	if m == nil {
 		return ""
 	}
@@ -333,7 +339,7 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInf
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
@@ -494,7 +500,7 @@ func fetchPageAndDTSG(ctx context.Context, videoID, ck string) (string, string, 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return "", "", fmt.Errorf("read page: %w", err)
 	}
@@ -593,7 +599,7 @@ func queryGraphQL(ctx context.Context, videoID, dtsg, ck string) (*MediaInfo, er
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read graphql response: %w", err)
 	}
@@ -707,7 +713,7 @@ func fetchVideoViaEmbed(ctx context.Context, targetURL, ck string) (*MediaInfo, 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}

@@ -32,12 +32,11 @@ An OpenAPI 3.0 specification file is provided at [openapi.yaml](file:///home/sin
 5. **Reddit** (Videos, Images, Galleries)
 6. **Twitter / X** (Videos, Photos)
 7. **Pinterest** (Videos, Images)
-8. **YouTube** (Videos and Audio via hybrid `yt-dlp` wrapper)
-9. **LinkedIn** (Videos, Public Images fallback crawler)
-10. **TeraBox** (Files, Multi-file folders, and streaming m3u8 playlists)
-11. **Spotify** (Track/Album metadata and downloads)
-12. **Soundcloud** (Audio)
-13. **CapCut** (Templates and videos)
+8. **LinkedIn** (Videos, Public Images fallback crawler)
+9. **TeraBox** (Files, Multi-file folders, and streaming m3u8 playlists)
+10. **Spotify** (Track/Album metadata and downloads)
+11. **Soundcloud** (Audio)
+12. **CapCut** (Templates and videos)
 
 ---
 
@@ -46,7 +45,7 @@ An OpenAPI 3.0 specification file is provided at [openapi.yaml](file:///home/sin
 Astra follows Go best practices with an emphasis on concurrency safety and maintainability.
 
 * **`cmd/server/`** — Entrypoint (`main.go`), route mapping (`routes.go`), and integration tests.
-* **`internal/platform/`** — Independent platform scraper engines, isolated into subpackages (`youtube`, `terabox`, `tiktok`, etc).
+* **`internal/platform/`** — Independent platform scraper engines, isolated into subpackages (`meta`, `terabox`, `tiktok`, etc).
 * **`internal/handler/`** — HTTP handlers wrapping platform execution logic via a generic `makeDownloadHandler` helper for uniform validation, execution, and JSON responses.
 * **`internal/httpclient/`** — Tuned global `http.Client` with optimized connection pooling (`MaxIdleConnsPerHost = 100`) for connection reuse under scraping load.
 * **`internal/types/`** — Shared data structures such as `DownloadItem` and `MediaType`.
@@ -65,7 +64,6 @@ Astra follows Go best practices with an emphasis on concurrency safety and maint
 
 ### Prerequisites
 - Go 1.20+
-- `yt-dlp` binary (for YouTube extraction)
 
 ### Running Locally
 ```bash
@@ -92,8 +90,7 @@ cp .env.example .env
 | `PORT` | Server listening port | `3000` |
 | `HOST` | Server host interface | `0.0.0.0` |
 | `INSTAGRAM_COOKIES` | Session cookies for Instagram API access | Optional |
-| `YOUTUBE_COOKIES_FILE` | Path to exported cookie file for `yt-dlp` | `yt-cookies.txt` |
-| `YT_DLP_PATH` | Path to custom `yt-dlp` executable | Optional |
+| `FACEBOOK_COOKIES` | Session cookies for Facebook authenticated scraping (private/group posts, albums) | Optional |
 
 ---
 
@@ -111,32 +108,15 @@ Some platforms require session cookies to access content behind logins or age-ga
    ```
 
 ### Facebook
-Most public Facebook media is scraped directly via HTML/SnapSave-style parsers. For advanced setups, custom headers or browser-based cookies can be configured directly inside `internal/platform/facebook/`.
-
-### YouTube (`yt-dlp`)
-1. Install a cookie exporter extension (e.g. **Get Cookies.txt**) in your browser.
-2. Log in to [youtube.com](https://www.youtube.com).
-3. Export cookies in **Netscape** format and save as `yt-cookies.txt` in the project root.
-4. Set in `.env`:
-   ```env
-   YOUTUBE_COOKIES_FILE="yt-cookies.txt"
-   ```
+Public Facebook media is scraped directly via HTML/GraphQL-payload parsers. For private/group posts and multi-photo albums, provide `FACEBOOK_COOKIES`. Extract them with the bundled tool:
+```bash
+go build -o ig-cookies ./cmd/ig-cookies
+./ig-cookies -browser firefox -platform facebook -out env   # works with Firefox/Zen/LibreWolf
+```
 
 ---
 
 ## Deployment
-
-### `yt-dlp` Resolution
-Astra resolves the `yt-dlp` binary in the following order:
-1. `YT_DLP_PATH` environment variable, if set.
-2. Local `./yt-dlp` in the project root.
-3. System-wide `yt-dlp` resolved via `$PATH`.
-
-To install locally:
-```bash
-curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o yt-dlp
-chmod +x yt-dlp
-```
 
 ### Running as a systemd Service
 ```bash
@@ -171,7 +151,6 @@ sudo systemctl status astra
 
 ## Requirements
 - **Go** – 1.20 or above
-- **yt-dlp** – for YouTube extraction support
 - **Linux/macOS/Windows** – cross-platform server binary
 
 ---

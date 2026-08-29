@@ -341,26 +341,6 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorResponse'
 
-  /api/youtube/download:
-    get:
-      summary: YouTube Downloader
-      description: Extract direct videos and audios at varying resolutions from a YouTube URL via a hybrid `yt-dlp` wrapper.
-      tags:
-        - YouTube
-      parameters:
-        - $ref: '#/components/parameters/UrlQueryParam'
-      responses:
-        '200':
-          description: Formats lists retrieved successfully.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardMediaResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-
 components:
   parameters:
     UrlQueryParam:

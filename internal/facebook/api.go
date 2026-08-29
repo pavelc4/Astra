@@ -202,6 +202,19 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 				return nil, errPage
 			}
 
+			// Primary modern path: direct MP4s server-rendered into the page.
+			if vids := extractProgressiveVideos(pageHTML); len(vids) > 0 {
+				info := &MediaInfo{Videos: vids, Caption: extractVideoCaption(pageHTML)}
+				if th := regexp.MustCompile(`"preferred_thumbnail":\{"image":\{"uri":"([^"]+)"`).FindStringSubmatch(pageHTML); len(th) > 1 {
+					thumb := cleanJSURL(th[1])
+					info.Thumbnail = &thumb
+					for i := range info.Videos {
+						info.Videos[i].Thumbnail = &thumb
+					}
+				}
+				return info, nil
+			}
+
 			infoGQL, errGQL := queryGraphQL(ctx, videoID, dtsg, ck)
 			if errGQL == nil {
 				return infoGQL, nil
@@ -472,8 +485,8 @@ func fetchPageAndDTSG(ctx context.Context, videoID, ck string) (string, string, 
 	if err != nil {
 		return "", "", fmt.Errorf("create page request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 	req.Header.Set("Cookie", ck)
+	setBrowserHeaders(req)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -495,6 +508,60 @@ func fetchPageAndDTSG(ctx context.Context, videoID, ck string) (string, string, 
 	}
 
 	return html, dtsg, nil
+}
+
+// extractVideoCaption pulls the reel/video caption. The watch page <title> is
+// just "Video"; the real text lives in the story's message.text (JSON-escaped).
+//
+// ponytail: takes the first message.text on the page (the primary video's
+// creation story precedes comments in the SSR). If comments start leaking in,
+// scope it to the videoDeliveryResponseFragment's owning story.
+func extractVideoCaption(htmlStr string) string {
+	if m := regexp.MustCompile(`"message":\{"text":"((?:[^"\\]|\\.)*)"`).FindStringSubmatch(htmlStr); len(m) > 1 {
+		var s string
+		if err := json.Unmarshal([]byte(`"`+m[1]+`"`), &s); err == nil && strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	if t := regexp.MustCompile(`<title[^>]*>([^<]+)</title>`).FindStringSubmatch(htmlStr); len(t) > 1 {
+		return html.UnescapeString(strings.TrimSpace(t[1]))
+	}
+	return ""
+}
+
+var progressiveURLRe = regexp.MustCompile(`"progressive_url":"(https:\\?/\\?/[^"]+?)"[^}]*?"quality":"(\w+)"`)
+
+// extractProgressiveVideos pulls the direct-download MP4 URLs FB server-renders
+// into the watch page (progressive_urls with HD/SD quality labels). Returns nil
+// if none present — callers fall back to the legacy embed/GraphQL paths.
+//
+// ponytail: modern FB videos ship via DASH; plugins/video.php (hd_src/sd_src)
+// now returns "unavailable" for many of them. The progressive_urls in the SSR
+// payload are the reliable source. If FB drops them, the fallback is parsing the
+// DASH base_url representations.
+func extractProgressiveVideos(htmlStr string) []MediaItem {
+	matches := progressiveURLRe.FindAllStringSubmatch(htmlStr, -1)
+	if matches == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var hd, sd []MediaItem
+	for _, m := range matches {
+		clean := cleanJSURL(m[1])
+		q := strings.ToLower(m[2])
+		if seen[q] {
+			continue
+		}
+		seen[q] = true
+		item := MediaItem{Quality: q, URL: clean}
+		if q == "hd" {
+			hd = append(hd, item)
+		} else {
+			sd = append(sd, item)
+		}
+	}
+	// HD first so the best quality is the primary source.
+	return append(hd, sd...)
 }
 
 func queryGraphQL(ctx context.Context, videoID, dtsg, ck string) (*MediaInfo, error) {

@@ -193,11 +193,12 @@ func queryFirefoxDB(path, hostFilter string, cookieNames []string, label string)
 		if err := rows.Scan(&name, &value); err != nil {
 			return nil, err
 		}
-		for _, cn := range cookieNames {
-			if name == cn && !seen[name] {
-				vals[name] = value
-				seen[name] = true
-			}
+		// Grab every cookie for the host (datr, sb, fr, …); main.go's
+		// formatCookieString picks the ones each platform needs. cookieNames
+		// below is only the must-be-present check.
+		if !seen[name] {
+			vals[name] = value
+			seen[name] = true
 		}
 	}
 

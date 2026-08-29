@@ -121,7 +121,10 @@ func formatCookieString(c *extractor.Cookies, platform string) string {
 	var parts []string
 	switch platform {
 	case "facebook":
-		for _, name := range []string{"c_user", "xs", "fr", "dpr"} {
+		// datr + sb are required for FB to honor the session on browser/mobile
+		// and GraphQL endpoints — without them c_user+xs only works for the
+		// facebookexternalhit crawler (single og:image, no carousel).
+		for _, name := range []string{"c_user", "xs", "datr", "sb", "fr", "dpr"} {
 			if v, ok := c.Values[name]; ok {
 				parts = append(parts, name+"="+v)
 			}

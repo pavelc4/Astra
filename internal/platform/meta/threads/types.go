@@ -1,4 +1,4 @@
-package meta
+package threads
 
 type ThreadsPhotoVariant struct {
 	Resolution string `json:"resolution"`

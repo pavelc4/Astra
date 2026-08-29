@@ -1,4 +1,4 @@
-package meta
+package threads
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"github.com/pavelc4/astra/internal/httpclient"
 )
 
-func FetchThreadsData(ctx context.Context, postURL string) (*ThreadsResult, error) {
+func FetchData(ctx context.Context, postURL string) (*ThreadsResult, error) {
 	var caption string
 	var fallbackImage string
 

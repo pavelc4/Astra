@@ -17,69 +17,94 @@ var (
 	albumBlockRe = regexp.MustCompile(`"all_subattachments":\{"count":(\d+)`)
 	// viewer_image is the full-resolution variant (carries height/width); image
 	// is the smaller thumbnail. Prefer viewer_image, fall back to image.
+	// Photo nodes render viewer_image with dims first; a video node's poster
+	// renders "viewer_image":{"uri":...} with NO dims, so this only ever matches
+	// real photos — the discriminator that keeps video posters out of Photos.
 	albumViewerRe = regexp.MustCompile(`"viewer_image":\{"height":(\d+),"width":(\d+),"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
 	albumThumbRe  = regexp.MustCompile(`"image":\{"uri":"(https:\\?/\\?/scontent[^"]+?)"`)
 	photoBaseRe   = regexp.MustCompile(`/(\d{6,}_\d+_\d+)_`)
+	// each subattachment node in all_subattachments.nodes[] begins with this key
+	albumNodeRe = regexp.MustCompile(`"deduplication_key"`)
 )
 
-// extractAlbumPhotos parses the multi-photo carousel FB embeds in the
-// authenticated permalink HTML (StoryAttachmentAlbumStyleRenderer). Returns nil
-// if the page has no album block — callers fall back to og:image.
+// extractAlbumMedia parses the multi-item carousel FB embeds in the
+// authenticated permalink HTML (StoryAttachmentAlbumStyleRenderer), returning
+// photos and videos separately. Each node in all_subattachments.nodes[] is a
+// Photo or a Video; a Video's poster image must NOT be counted as a photo.
+// Returns nil,nil if the page has no album block — callers fall back to og:image.
 //
 // ponytail: scrapes the server-rendered Relay payload, not the GraphQL API —
 // FB killed arbitrary q= queries (doc_id-only now), but still SSRs the result
 // into the page. If FB stops embedding it, switch to a persisted doc_id call.
-func extractAlbumPhotos(htmlStr string) []MediaItem {
+func extractAlbumMedia(htmlStr string) (photos, videos []MediaItem) {
 	loc := albumBlockRe.FindStringSubmatchIndex(htmlStr)
 	if loc == nil {
-		return nil
+		return nil, nil
 	}
 	count := 0
 	for _, c := range htmlStr[loc[2]:loc[3]] {
 		count = count*10 + int(c-'0')
 	}
 	if count < 1 {
-		return nil
+		return nil, nil
 	}
 
-	// Scan only from the album block onward, and cap at count so we don't bleed
-	// into a neighbouring post's album further down the page. Dedupe by fbcdn
-	// basename (same photo appears as both viewer_image and image).
+	// Split the node array by its per-node "deduplication_key" marker and cap at
+	// count so we don't bleed into a neighbouring post's attachments further down.
 	tail := htmlStr[loc[1]:]
+	starts := albumNodeRe.FindAllStringIndex(tail, count+1)
+	if len(starts) == 0 {
+		return nil, nil
+	}
+
 	seen := make(map[string]bool)
-	photos := make([]MediaItem, 0, count)
+	for i := 0; i < count && i < len(starts); i++ {
+		end := len(tail)
+		if i+1 < len(starts) {
+			end = starts[i+1][0]
+		}
+		node := tail[starts[i][0]:end]
 
-	for _, m := range albumViewerRe.FindAllStringSubmatch(tail, count*2) {
-		clean := cleanJSURL(m[3])
-		base := photoBaseName(clean)
-		if base == "" || seen[base] {
+		if strings.Contains(node, `"__typename":"Video"`) {
+			// ponytail: take the best progressive MP4 (HD first) FB SSRs into the
+			// node; skips DASH-only videos entirely rather than emitting a broken
+			// entry. Add dash_manifests base_url parsing if such videos show up.
+			if v := extractProgressiveVideos(node); len(v) > 0 {
+				item := v[0]
+				if poster := firstAlbumImage(node); poster != "" {
+					item.Thumbnail = &poster
+				}
+				videos = append(videos, item)
+			}
 			continue
 		}
-		seen[base] = true
-		photos = append(photos, MediaItem{URL: clean, Quality: m[2] + "x" + m[1]}) // WxH
-		if len(photos) == count {
-			return photos
-		}
-	}
 
-	// Fallback: nodes without a viewer_image — take the thumbnail (no dims).
-	for _, m := range albumThumbRe.FindAllStringSubmatch(tail, count*2) {
-		clean := cleanJSURL(m[1])
-		base := photoBaseName(clean)
-		if base == "" || seen[base] {
-			continue
+		// Photo node: prefer full-res viewer_image (WxH), fall back to image.
+		if m := albumViewerRe.FindStringSubmatch(node); len(m) > 3 {
+			clean := cleanJSURL(m[3])
+			if base := photoBaseName(clean); base != "" && !seen[base] {
+				seen[base] = true
+				photos = append(photos, MediaItem{URL: clean, Quality: m[2] + "x" + m[1]}) // WxH
+				continue
+			}
 		}
-		seen[base] = true
-		photos = append(photos, MediaItem{URL: clean})
-		if len(photos) == count {
-			break
+		if u := firstAlbumImage(node); u != "" {
+			if base := photoBaseName(u); base != "" && !seen[base] {
+				seen[base] = true
+				photos = append(photos, MediaItem{URL: u})
+			}
 		}
 	}
+	return photos, videos
+}
 
-	if len(photos) == 0 {
-		return nil
+// firstAlbumImage returns the first fbcdn image uri in a node — a photo's image
+// or a video's poster.
+func firstAlbumImage(node string) string {
+	if m := albumThumbRe.FindStringSubmatch(node); len(m) > 1 {
+		return cleanJSURL(m[1])
 	}
-	return photos
+	return ""
 }
 
 // photoBaseName returns the fbcdn filename (123_456_789_n) so the same photo at
@@ -130,11 +155,16 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInf
 		info.Caption = html.UnescapeString(val)
 	}
 
-	// Multi-photo carousel: prefer the server-rendered album block (all N photos)
-	// over og:image (which only ever carries the single cover thumbnail).
-	if album := extractAlbumPhotos(htmlStr); len(album) > 0 {
-		info.Photos = album
-		info.Thumbnail = &info.Photos[0].URL
+	// Multi-item carousel: prefer the server-rendered album block (all N items,
+	// photos and videos) over og:image (which only ever carries the single cover).
+	if photos, videos := extractAlbumMedia(htmlStr); len(photos)+len(videos) > 0 {
+		info.Photos = photos
+		info.Videos = videos
+		if len(photos) > 0 {
+			info.Thumbnail = &info.Photos[0].URL
+		} else if videos[0].Thumbnail != nil {
+			info.Thumbnail = videos[0].Thumbnail
+		}
 		// Authenticated album pages carry no og:title — fall back to <title>.
 		if info.Caption == "" {
 			if t := regexp.MustCompile(`<title[^>]*>([^<]+)</title>`).FindStringSubmatch(htmlStr); len(t) > 1 {

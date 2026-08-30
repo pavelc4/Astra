@@ -66,57 +66,57 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 		}
 	}
 
-	// 3. For video URLs or group URLs (which might contain a video), try to download as video
-	if isVideo || isGroup {
+	// 3. Dedicated video URLs: embed fast-path, then page/GraphQL fallbacks.
+	if isVideo {
 		info, err := fetchVideoViaEmbed(ctx, resolvedURL, ck)
 		if err == nil {
 			return info, nil
 		}
 
-		if isVideo {
-			// Fallback to page fetch + extraction/GraphQL if embed fails (only for dedicated video URLs)
-			videoID, errID := extractVideoID(ctx, resolvedURL)
-			if errID != nil {
-				return nil, err
-			}
-
-			if ck == "" {
-				return nil, fmt.Errorf("FACEBOOK_COOKIES not set — GraphQL API requires authentication")
-			}
-
-			pageHTML, dtsg, errPage := fetchPageAndDTSG(ctx, videoID, ck)
-			if errPage != nil {
-				return nil, errPage
-			}
-
-			// Primary modern path: direct MP4s server-rendered into the page.
-			if vids := extractProgressiveVideos(pageHTML); len(vids) > 0 {
-				info := &MediaInfo{Videos: vids, Caption: extractVideoCaption(pageHTML)}
-				if th := regexp.MustCompile(`"preferred_thumbnail":\{"image":\{"uri":"([^"]+)"`).FindStringSubmatch(pageHTML); len(th) > 1 {
-					thumb := cleanJSURL(th[1])
-					info.Thumbnail = &thumb
-					for i := range info.Videos {
-						info.Videos[i].Thumbnail = &thumb
-					}
-				}
-				return info, nil
-			}
-
-			infoGQL, errGQL := queryGraphQL(ctx, videoID, dtsg, ck)
-			if errGQL == nil {
-				return infoGQL, nil
-			}
-
-			fallbackInfo, errExt := extractFromPage(pageHTML, videoID)
-			if errExt == nil {
-				return fallbackInfo, nil
-			}
-
+		// Fallback to page fetch + extraction/GraphQL if embed fails.
+		videoID, errID := extractVideoID(ctx, resolvedURL)
+		if errID != nil {
 			return nil, err
 		}
+
+		if ck == "" {
+			return nil, fmt.Errorf("FACEBOOK_COOKIES not set — GraphQL API requires authentication")
+		}
+
+		pageHTML, dtsg, errPage := fetchPageAndDTSG(ctx, videoID, ck)
+		if errPage != nil {
+			return nil, errPage
+		}
+
+		// Primary modern path: direct MP4s server-rendered into the page.
+		if vids := extractProgressiveVideos(pageHTML); len(vids) > 0 {
+			info := &MediaInfo{Videos: vids, Caption: extractVideoCaption(pageHTML)}
+			if th := regexp.MustCompile(`"preferred_thumbnail":\{"image":\{"uri":"([^"]+)"`).FindStringSubmatch(pageHTML); len(th) > 1 {
+				thumb := cleanJSURL(th[1])
+				info.Thumbnail = &thumb
+				for i := range info.Videos {
+					info.Videos[i].Thumbnail = &thumb
+				}
+			}
+			return info, nil
+		}
+
+		infoGQL, errGQL := queryGraphQL(ctx, videoID, dtsg, ck)
+		if errGQL == nil {
+			return infoGQL, nil
+		}
+
+		fallbackInfo, errExt := extractFromPage(pageHTML, videoID)
+		if errExt == nil {
+			return fallbackInfo, nil
+		}
+
+		return nil, err
 	}
 
-	// 4. Determine if it is a photo/post URL (or group URL fallback)
+	// 4. Posts, permalinks, photos and group URLs may be a single photo, a mixed
+	// photo+video carousel, or a lone video. The crawler extracts photos AND
+	// album videos in one pass; embed is the fallback for a group's single video.
 	isPhoto := false
 	if err == nil {
 		path := u.Path
@@ -129,12 +129,11 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 		return nil, fmt.Errorf("invalid Facebook URL path: %s", resolvedURL)
 	}
 
-	// 5. For photo/post URLs, fetch as crawler.
-	// Prefer cookies first: the multi-photo album is only server-rendered on the
+	// 5. Crawl. Prefer cookies first: the album is only server-rendered on the
 	// authenticated page. Without cookies FB returns a single og:image cover, so
-	// a no-cookie-first strategy would stop at 1 photo and never retry (len != 0).
+	// a no-cookie-first strategy would stop at 1 photo and never retry.
 	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, ck)
-	if err != nil || len(info.Photos) == 0 {
+	if err != nil || (len(info.Photos) == 0 && len(info.Videos) == 0) {
 		if ck != "" {
 			// Retry unauthenticated — still yields the og:image cover for public
 			// posts if the authenticated fetch got rate-limited (400).
@@ -146,7 +145,17 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 		return nil, err
 	}
 
-	if len(info.Photos) == 0 {
+	// A group permalink that is really a single video renders no album block —
+	// only a cover og:image. Prefer the actual video via embed in that case.
+	// ponytail: len heuristic; a single-photo group post costs one wasted
+	// (failing) embed call. Parse og:type to skip it if that ever matters.
+	if isGroup && len(info.Videos) == 0 && len(info.Photos) <= 1 {
+		if v, verr := fetchVideoViaEmbed(ctx, resolvedURL, ck); verr == nil && len(v.Videos) > 0 {
+			return v, nil
+		}
+	}
+
+	if len(info.Photos) == 0 && len(info.Videos) == 0 {
 		return nil, fmt.Errorf("no media found for Facebook URL: %s", resolvedURL)
 	}
 

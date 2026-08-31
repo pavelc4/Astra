@@ -79,13 +79,24 @@ func (c *IGClient) getJSON(ctx context.Context, url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("instagram returned %d (cookie expired?)", resp.StatusCode)
-	}
-
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode >= 300 {
+		// IG returns 400 for BOTH a dead session and an anti-scraping soft-block;
+		// only the body tells them apart. Reporting the wrong one sends you
+		// refreshing cookies when the real problem is rate-limiting (or vice versa).
+		body := string(data)
+		switch {
+		case strings.Contains(body, "feedback_required") || strings.Contains(body, "is_spam"):
+			return nil, fmt.Errorf("instagram rate-limited (feedback_required) — back off / try later or a different IP")
+		case strings.Contains(body, "login_required") || strings.Contains(body, "checkpoint"):
+			return nil, fmt.Errorf("instagram %d: login/checkpoint required — cookie expired or invalid", resp.StatusCode)
+		default:
+			return nil, fmt.Errorf("instagram returned %d", resp.StatusCode)
+		}
 	}
 
 	return data, nil

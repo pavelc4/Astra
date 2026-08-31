@@ -32,6 +32,8 @@ func (f *firefoxExtractor) hostFilter() string {
 	switch f.platform {
 	case "facebook":
 		return "%facebook.com"
+	case "pixiv":
+		return "%pixiv.net"
 	default:
 		return "%instagram.com"
 	}
@@ -41,6 +43,8 @@ func (f *firefoxExtractor) cookieNames() []string {
 	switch f.platform {
 	case "facebook":
 		return []string{"c_user", "xs"}
+	case "pixiv":
+		return []string{"PHPSESSID"}
 	default:
 		return []string{"sessionid", "csrftoken"}
 	}
@@ -50,6 +54,8 @@ func (f *firefoxExtractor) platformLabel() string {
 	switch f.platform {
 	case "facebook":
 		return "Facebook"
+	case "pixiv":
+		return "Pixiv"
 	default:
 		return "Instagram"
 	}

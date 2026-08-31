@@ -7,6 +7,7 @@ import (
 
 	"github.com/pavelc4/astra/internal/platform/meta/facebook"
 	"github.com/pavelc4/astra/internal/platform/meta/instagram"
+	"github.com/pavelc4/astra/internal/platform/pixiv"
 )
 
 type Config struct {
@@ -27,6 +28,9 @@ func Load() Config {
 	}
 	if c := os.Getenv("FACEBOOK_COOKIES"); c != "" {
 		facebook.SetCookies(c)
+	}
+	if c := os.Getenv("PIXIV_COOKIES"); c != "" {
+		pixiv.SetCookies(c)
 	}
 
 	return cfg

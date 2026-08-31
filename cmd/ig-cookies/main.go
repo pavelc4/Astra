@@ -47,16 +47,20 @@ func main() {
 	}
 
 	platform := *platformFlag
-	if platform != "instagram" && platform != "facebook" {
-		fmt.Fprintf(os.Stderr, "Error: unknown platform '%s'. Use 'instagram' or 'facebook'\n", platform)
+	if platform != "instagram" && platform != "facebook" && platform != "pixiv" {
+		fmt.Fprintf(os.Stderr, "Error: unknown platform '%s'. Use 'instagram', 'facebook' or 'pixiv'\n", platform)
 		os.Exit(1)
 	}
 
 	label := "Instagram"
 	envVar := "INSTAGRAM_COOKIES"
-	if platform == "facebook" {
+	switch platform {
+	case "facebook":
 		label = "Facebook"
 		envVar = "FACEBOOK_COOKIES"
+	case "pixiv":
+		label = "Pixiv"
+		envVar = "PIXIV_COOKIES"
 	}
 
 	fmt.Printf("=== %s Cookie Extractor ===\n", label)
@@ -125,6 +129,15 @@ func formatCookieString(c *extractor.Cookies, platform string) string {
 		// and GraphQL endpoints — without them c_user+xs only works for the
 		// facebookexternalhit crawler (single og:image, no carousel).
 		for _, name := range []string{"c_user", "xs", "datr", "sb", "fr", "dpr"} {
+			if v, ok := c.Values[name]; ok {
+				parts = append(parts, name+"="+v)
+			}
+		}
+	case "pixiv":
+		// Pixiv honors login off PHPSESSID; forward the auth cookies verbatim.
+		for _, name := range []string{
+			"PHPSESSID", "login_ever", "device_token", "p_ab_id", "cf_clearance",
+		} {
 			if v, ok := c.Values[name]; ok {
 				parts = append(parts, name+"="+v)
 			}

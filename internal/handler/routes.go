@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/pavelc4/astra/internal/platform/meta/instagram"
 	"github.com/pavelc4/astra/internal/platform/meta/threads"
 	"github.com/pavelc4/astra/internal/platform/pinterest"
+	"github.com/pavelc4/astra/internal/platform/pixiv"
 	"github.com/pavelc4/astra/internal/platform/reddit"
 	"github.com/pavelc4/astra/internal/platform/soundcloud"
 	"github.com/pavelc4/astra/internal/platform/spotify"
@@ -63,6 +66,13 @@ func (h *Handlers) Register(r chi.Router) {
 	r.Route("/api/linkedin", func(r chi.Router) {
 		r.Get("/download", download(h, linkedin.FetchData, "LinkedIn media fetched successfully"))
 	})
+	r.Route("/api/pixiv", func(r chi.Router) {
+		r.Get("/download", h.PixivDownload)
+		r.Get("/profile", download(h, pixiv.FetchUserProfile, "Pixiv profile fetched successfully"))
+		r.Get("/illustrations", download(h, pixiv.FetchUserIllustrations, "Pixiv illustrations fetched successfully"))
+		r.Get("/bookmarks", download(h, pixiv.FetchUserBookmarks, "Pixiv bookmarks fetched successfully"))
+		r.Get("/image", h.PixivImage)
+	})
 
 	r.Get("/", handleRoot)
 }
@@ -91,6 +101,69 @@ func (h *Handlers) InstagramStories(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, data, "Instagram stories fetched successfully")
 }
 
+// PixivDownload returns the artwork metadata like any downloader, but rewrites
+// every i.pximg.net URL (thumbnail + each download) into our own /image proxy
+// endpoint — so the returned urls open/download directly without Pixiv's 403.
+func (h *Handlers) PixivDownload(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	if targetURL == "" {
+		response.HandleError(w, errors.NewValidation("url parameter is required"))
+		return
+	}
+
+	md, err := pixiv.FetchData(r.Context(), targetURL)
+	if err != nil {
+		response.HandleError(w, err)
+		return
+	}
+
+	proxy := pixivProxyURL(r)
+	md.Thumbnail = proxy(md.Thumbnail)
+	for i := range md.Items {
+		md.Items[i].URL = proxy(md.Items[i].URL)
+		md.Items[i].Thumbnail = proxy(md.Items[i].Thumbnail)
+	}
+
+	response.OK(w, md, "Pixiv media fetched successfully")
+}
+
+// pixivProxyURL builds a closure that turns an i.pximg.net URL into our own
+// /api/pixiv/image endpoint on the same origin as the incoming request.
+func pixivProxyURL(r *http.Request) func(string) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	base := scheme + "://" + r.Host + "/api/pixiv/image?url="
+	return func(u string) string {
+		if u == "" || !strings.Contains(u, "i.pximg.net") {
+			return u
+		}
+		return base + url.QueryEscape(u)
+	}
+}
+
+// PixivImage streams a Pixiv media file through the server so clients that
+// can't set a Referer header can still fetch the bytes. Accepts either an
+// artwork URL (e.g. /artworks/{id}) or a raw i.pximg.net URL directly.
+func (h *Handlers) PixivImage(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	if targetURL == "" {
+		response.HandleError(w, errors.NewValidation("url parameter is required"))
+		return
+	}
+
+	// Set before streaming: headers flush once the first bytes hit the wire.
+	w.Header().Set("Content-Disposition", "attachment; filename=\"pixiv-download\"")
+	ctype, err := pixiv.StreamDownload(r.Context(), targetURL, w)
+	if err != nil {
+		response.HandleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", ctype)
+}
+
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, map[string]any{
 		"endpoints": []string{
@@ -111,6 +184,11 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 			"/api/soundcloud/download",
 			"/api/capcut/download",
 			"/api/linkedin/download",
+			"/api/pixiv/download",
+			"/api/pixiv/profile",
+			"/api/pixiv/illustrations",
+			"/api/pixiv/bookmarks",
+			"/api/pixiv/image",
 		},
 	}, "Universal Downloader API is running")
 }

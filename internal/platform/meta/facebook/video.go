@@ -27,6 +27,12 @@ var (
 	}
 
 	progressiveURLRe = regexp.MustCompile(`"progressive_url":"(https:\\?/\\?/[^"]+?)"[^}]*?"quality":"(\w+)"`)
+
+	// browser_native_{hd,sd}_url are the direct-download MP4s FB server-renders
+	// for reels and many feed/group videos that ship NO progressive_urls (they
+	// deliver via DASH: dash_manifest + base_url). Same HD-preferred shape.
+	browserNativeHDRe = regexp.MustCompile(`"browser_native_hd_url":"(https:\\?/\\?/[^"]+?)"`)
+	browserNativeSDRe = regexp.MustCompile(`"browser_native_sd_url":"(https:\\?/\\?/[^"]+?)"`)
 )
 
 func extractVideoID(ctx context.Context, rawURL string) (string, error) {
@@ -175,6 +181,28 @@ func extractProgressiveVideos(htmlStr string) []MediaItem {
 	}
 	// HD first so the best quality is the primary source.
 	return append(hd, sd...)
+}
+
+// extractBrowserNativeVideos pulls the direct MP4s FB exposes as
+// browser_native_hd_url / browser_native_sd_url. This is the fallback when a
+// video ships no progressive_urls (DASH-only delivery) — the case that made
+// reels fail intermittently and group videos fall back to a poster image.
+// Takes the FIRST of each: the primary video's creation story precedes any
+// suggested videos in the SSR.
+//
+// ponytail: first-match = primary video, same heuristic extractVideoCaption
+// uses. A video that ships ONLY dash_manifest base_url (no browser_native)
+// still yields nothing here; parse the DASH representations if such videos
+// show up.
+func extractBrowserNativeVideos(htmlStr string) []MediaItem {
+	var out []MediaItem
+	if m := browserNativeHDRe.FindStringSubmatch(htmlStr); len(m) > 1 {
+		out = append(out, MediaItem{Quality: "hd", URL: cleanJSURL(m[1])})
+	}
+	if m := browserNativeSDRe.FindStringSubmatch(htmlStr); len(m) > 1 {
+		out = append(out, MediaItem{Quality: "sd", URL: cleanJSURL(m[1])})
+	}
+	return out
 }
 
 func queryGraphQL(ctx context.Context, videoID, dtsg, ck string) (*MediaInfo, error) {
@@ -350,10 +378,12 @@ func fetchVideoViaEmbed(ctx context.Context, targetURL, ck string) (*MediaInfo, 
 		info.Videos = append(info.Videos, MediaItem{Quality: "sd", URL: sdURL})
 	}
 
-	// Try fetching title/caption from watch/reel page as crawler
-	crawlerInfo, err := fetchPhotosViaCrawler(ctx, targetURL, "")
+	// Try fetching title/caption from watch/reel page as crawler. Video already
+	// resolved above via the embed player, so this only needs caption/thumbnail —
+	// wantVideo=false keeps it out of the crawler's video-extraction branch.
+	crawlerInfo, err := fetchPhotosViaCrawler(ctx, targetURL, "", false)
 	if err != nil && ck != "" {
-		crawlerInfo, err = fetchPhotosViaCrawler(ctx, targetURL, ck)
+		crawlerInfo, err = fetchPhotosViaCrawler(ctx, targetURL, ck, false)
 	}
 	if err == nil {
 		info.Caption = crawlerInfo.Caption

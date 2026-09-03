@@ -25,7 +25,24 @@ var (
 	photoBaseRe   = regexp.MustCompile(`/(\d{6,}_\d+_\d+)_`)
 	// each subattachment node in all_subattachments.nodes[] begins with this key
 	albumNodeRe = regexp.MustCompile(`"deduplication_key"`)
+	// og:type is "video.*" for reels and single-video posts — the signal that a
+	// non-album permalink is a video, not a photo set.
+	ogTypeRe = regexp.MustCompile(`<meta[^>]*(?:property|content)="og:type"[^>]*content="([^"]+)"|<meta[^>]*content="([^"]+)"[^>]*(?:property|content)="og:type"`)
 )
+
+// isVideoPage reports whether a crawled permalink is a video post (og:type
+// video.*). Routes single videos to MP4 extraction instead of the photo scraper.
+func isVideoPage(htmlStr string) bool {
+	m := ogTypeRe.FindStringSubmatch(htmlStr)
+	if len(m) < 3 {
+		return false
+	}
+	val := m[1]
+	if val == "" {
+		val = m[2]
+	}
+	return strings.HasPrefix(val, "video")
+}
 
 // extractAlbumMedia parses the multi-item carousel FB embeds in the
 // authenticated permalink HTML (StoryAttachmentAlbumStyleRenderer), returning
@@ -67,9 +84,14 @@ func extractAlbumMedia(htmlStr string) (photos, videos []MediaItem) {
 
 		if strings.Contains(node, `"__typename":"Video"`) {
 			// ponytail: take the best progressive MP4 (HD first) FB SSRs into the
-			// node; skips DASH-only videos entirely rather than emitting a broken
-			// entry. Add dash_manifests base_url parsing if such videos show up.
-			if v := extractProgressiveVideos(node); len(v) > 0 {
+			// node; browser_native_{hd,sd}_url is the fallback for DASH-only videos
+			// that carry no progressive_urls. Skips a video only if neither is
+			// present. Add dash_manifests base_url parsing if such videos show up.
+			v := extractProgressiveVideos(node)
+			if len(v) == 0 {
+				v = extractBrowserNativeVideos(node)
+			}
+			if len(v) > 0 {
 				item := v[0]
 				if poster := firstAlbumImage(node); poster != "" {
 					item.Thumbnail = &poster
@@ -117,7 +139,7 @@ func photoBaseName(u string) string {
 	return m[1]
 }
 
-func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInfo, error) {
+func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string, wantVideo bool) (*MediaInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -172,6 +194,38 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string) (*MediaInf
 			}
 		}
 		return info, nil
+	}
+
+	// Single video posts (a /share/v/ that resolves to a group permalink, a lone
+	// reel) render NO album block and ship the MP4 as progressive_url /
+	// browser_native_* in the page. Without this, the og:image + comet fallback
+	// below scrapes the poster and every feed image instead of the video.
+	//
+	// Gated on wantVideo (caller knows this came from a /share/v//r/ link) or
+	// og:type=video on the lighter public page. NOT on progressive presence
+	// alone: the authenticated Comet page carries progressive_urls for a dozen
+	// suggested videos too, so an ungated grab would hijack real photo posts.
+	//
+	// ponytail: takes the first progressive/browser_native video = the primary
+	// post's, which the creation story renders before suggestions. If a suggested
+	// video ever sorts first, scope this to the primary story_attachment node.
+	if wantVideo || isVideoPage(htmlStr) {
+		vids := extractProgressiveVideos(htmlStr)
+		if len(vids) == 0 {
+			vids = extractBrowserNativeVideos(htmlStr)
+		}
+		if len(vids) > 0 {
+			if th := regexp.MustCompile(`"preferred_thumbnail":\{"image":\{"uri":"([^"]+)"`).FindStringSubmatch(htmlStr); len(th) > 1 {
+				thumb := cleanJSURL(th[1])
+				info.Thumbnail = &thumb
+				for i := range vids {
+					vids[i].Thumbnail = &thumb
+				}
+			}
+			info.Videos = vids
+			info.Photos = nil
+			return info, nil
+		}
 	}
 
 	// Extract photos

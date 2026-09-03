@@ -89,7 +89,13 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 		}
 
 		// Primary modern path: direct MP4s server-rendered into the page.
-		if vids := extractProgressiveVideos(pageHTML); len(vids) > 0 {
+		// progressive_urls first; browser_native_{hd,sd}_url when the video is
+		// DASH-only (reels, many group videos) and ships no progressive_urls.
+		vids := extractProgressiveVideos(pageHTML)
+		if len(vids) == 0 {
+			vids = extractBrowserNativeVideos(pageHTML)
+		}
+		if len(vids) > 0 {
 			info := &MediaInfo{Videos: vids, Caption: extractVideoCaption(pageHTML)}
 			if th := regexp.MustCompile(`"preferred_thumbnail":\{"image":\{"uri":"([^"]+)"`).FindStringSubmatch(pageHTML); len(th) > 1 {
 				thumb := cleanJSURL(th[1])
@@ -132,12 +138,19 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 	// 5. Crawl. Prefer cookies first: the album is only server-rendered on the
 	// authenticated page. Without cookies FB returns a single og:image cover, so
 	// a no-cookie-first strategy would stop at 1 photo and never retry.
-	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, ck)
+	//
+	// wantVideo: /share/v/ (video) and /share/r/ (reel) are video shares that
+	// resolve to a permalink/group URL the classifier above reads as a photo.
+	// The crawler needs this intent to extract the video instead of scraping the
+	// poster + every feed image. The authenticated page has no og:type, so the
+	// share type is the only reliable signal that survives to here.
+	wantVideo := strings.Contains(targetURL, "/share/v/") || strings.Contains(targetURL, "/share/r/")
+	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, ck, wantVideo)
 	if err != nil || (len(info.Photos) == 0 && len(info.Videos) == 0) {
 		if ck != "" {
 			// Retry unauthenticated — still yields the og:image cover for public
 			// posts if the authenticated fetch got rate-limited (400).
-			info, err = fetchPhotosViaCrawler(ctx, resolvedURL, "")
+			info, err = fetchPhotosViaCrawler(ctx, resolvedURL, "", wantVideo)
 		}
 	}
 

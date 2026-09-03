@@ -42,7 +42,7 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 	cookiesMu.RUnlock()
 
 	// 1. Resolve redirect of share/watch URL
-	resolvedURL, err := resolveRedirect(ctx, targetURL, ck)
+	resolvedURL, ogType, err := resolveRedirect(ctx, targetURL, ck)
 	if err != nil {
 		return nil, err
 	}
@@ -139,12 +139,16 @@ func fetchMediaInternal(ctx context.Context, targetURL string) (*MediaInfo, erro
 	// authenticated page. Without cookies FB returns a single og:image cover, so
 	// a no-cookie-first strategy would stop at 1 photo and never retry.
 	//
-	// wantVideo: /share/v/ (video) and /share/r/ (reel) are video shares that
-	// resolve to a permalink/group URL the classifier above reads as a photo.
-	// The crawler needs this intent to extract the video instead of scraping the
-	// poster + every feed image. The authenticated page has no og:type, so the
-	// share type is the only reliable signal that survives to here.
-	wantVideo := strings.Contains(targetURL, "/share/v/") || strings.Contains(targetURL, "/share/r/")
+	// wantVideo: /share/v/ (video) and /share/r/ (reel) are video shares, and
+	// og:type=video.* (read from the light resolve fetch) catches a video shared
+	// as /share/p/ that resolves to a plain /posts/ URL. All three resolve to a
+	// permalink/group URL the classifier above reads as a photo; without this the
+	// crawler scrapes the poster + every feed image (some of which 403 on the CDN
+	// fetch) instead of the video. The authenticated Comet page has no og:type,
+	// so these signals are the only ones that survive to here.
+	wantVideo := strings.Contains(targetURL, "/share/v/") ||
+		strings.Contains(targetURL, "/share/r/") ||
+		strings.HasPrefix(ogType, "video")
 	info, err := fetchPhotosViaCrawler(ctx, resolvedURL, ck, wantVideo)
 	if err != nil || (len(info.Photos) == 0 && len(info.Videos) == 0) {
 		if ck != "" {

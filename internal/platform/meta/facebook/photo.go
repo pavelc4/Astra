@@ -250,8 +250,12 @@ func fetchPhotosViaCrawler(ctx context.Context, targetURL, ck string, wantVideo 
 		info.Photos = append(info.Photos, MediaItem{URL: clean})
 	}
 
-	// Fallback photo extraction for dynamically loaded/Comet page HTML (e.g. private groups/posts)
-	if len(info.Photos) == 0 {
+	// Fallback photo extraction for dynamically loaded/Comet page HTML (e.g. private groups/posts).
+	// Skipped for video pages: this scrape grabs every fbcdn image on the page —
+	// profile pics, cover photos, feed thumbnails — and for a video-as-post that
+	// means dozens of junk images, some at sizes the CDN 403s. A video with no
+	// extractable URL returns nothing here and falls through to a clean error.
+	if len(info.Photos) == 0 && !wantVideo && !isVideoPage(htmlStr) {
 		// Post photos typically reside under /t39.xxxx or /v/t39.xxxx and have _n.jpg/_n.png/_n.webp in their filenames
 		cometImageRe := regexp.MustCompile(`https?:\\?/\\?/[^\s"'>]+?fbcdn\.net[^\s"'>]+?(?:_n\.[a-zA-Z0-9]+|\/t39\.[^\s"'>]+?\.[a-zA-Z0-9]+)[^\s"'>]*`)
 		cometMatches := cometImageRe.FindAllString(htmlStr, -1)
